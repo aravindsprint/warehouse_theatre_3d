@@ -1249,7 +1249,7 @@ const Sidebar = defineComponent({
     <div>
       <div id="wt-sb-overlay" :class="store.sidebarOpen?'show':''" @click="actions.toggleSidebar()"></div>
       <div id="wt-sb" :class="store.sidebarOpen?'mobile-open':''">
-        <div class="wt-sb-brand">Warehouse Theatre</div>
+        <div class="wt-sb-brand">Warehouse Theatre 3D</div>
         <div id="wt-sb-list">
           <template v-for="(gs, parent) in byParent" :key="parent">
             <span class="wt-sb-label">{{parent}}</span>
@@ -1294,8 +1294,6 @@ const TopBar = defineComponent({
   template: `
     <div id="wt-top">
       <button id="wt-mob-menu" @click="actions.toggleSidebar()" aria-label="Menu">☰</button>
-      <div id="wt-brand">Warehouse Theatre</div>
-      <div class="wt-sep"></div>
       <div id="wt-switcher">
         <div class="wt-sw-group">
           <button :class="['wt-sw-btn', store.curView==='3d'?'act':'']" @click="actions.setView('3d')">⬡ 3D</button>
