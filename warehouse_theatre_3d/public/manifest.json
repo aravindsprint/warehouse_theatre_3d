@@ -1,0 +1,19 @@
+{
+  "name": "Warehouse Theatre 3D",
+  "short_name": "WH Theatre 3D",
+  "description": "Free 3D & 2D warehouse storage visualization for any ERPNext warehouse hierarchy",
+  "start_url": "/warehouse-theatre-3d",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0c0e14",
+  "theme_color": "#1d9e75",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='80' fill='%231D9E75'/%3E%3Crect x='80' y='100' width='24' height='312' rx='6' fill='white'/%3E%3Crect x='408' y='100' width='24' height='312' rx='6' fill='white'/%3E%3Crect x='80' y='140' width='352' height='20' rx='4' fill='white'/%3E%3Crect x='104' y='100' width='120' height='40' rx='6' fill='rgba(255,255,255,0.35)'/%3E%3Crect x='240' y='100' width='150' height='40' rx='6' fill='rgba(255,255,255,0.55)'/%3E%3Crect x='80' y='256' width='352' height='20' rx='4' fill='white'/%3E%3Crect x='104' y='216' width='90' height='40' rx='6' fill='rgba(255,255,255,0.55)'/%3E%3Crect x='210' y='216' width='110' height='40' rx='6' fill='rgba(255,255,255,0.35)'/%3E%3Crect x='336' y='216' width='60' height='40' rx='6' fill='rgba(255,255,255,0.7)'/%3E%3Crect x='80' y='372' width='352' height='20' rx='4' fill='white'/%3E%3Crect x='104' y='332' width='140' height='40' rx='6' fill='rgba(255,255,255,0.7)'/%3E%3Crect x='260' y='332' width='80' height='40' rx='6' fill='rgba(255,255,255,0.4)'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"]
+}

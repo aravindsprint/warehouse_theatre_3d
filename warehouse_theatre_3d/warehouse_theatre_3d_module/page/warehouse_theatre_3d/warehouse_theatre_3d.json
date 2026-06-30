@@ -1,0 +1,14 @@
+{
+ "doctype": "Page",
+ "module": "Warehouse Theatre 3D Module",
+ "name": "warehouse-theatre-3d",
+ "page_name": "warehouse-theatre-3d",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "Stock Manager"},
+  {"role": "Stock User"}
+ ],
+ "standard": "Yes",
+ "system_page": 0,
+ "title": "Warehouse Theatre 3D"
+}

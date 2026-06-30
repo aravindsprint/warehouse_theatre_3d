@@ -1,0 +1,17 @@
+[build-system]
+requires = ["flit_core >=3.2.0,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "warehouse_theatre_3d"
+version = "0.1.0"
+description = "Free 3D & 2D warehouse storage visualization for any ERPNext warehouse hierarchy"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["frappe"]
+
+[tool.bench.frappe-dependencies]
+frappe = ">=15.0.0-dev,<=17.0.0-dev"
+
+[tool.flit.module]
+name = "warehouse_theatre_3d"
