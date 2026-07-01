@@ -149,7 +149,6 @@ def apply_depth_mapping(mapping, company=None):
 			frappe.db.set_value("Warehouse", w.name, "wt_warehouse_type", role, update_modified=False)
 			updated += 1
 
-	frappe.db.commit()
 	return {"ok": True, "updated": updated}
 
 

@@ -55,13 +55,9 @@ If your tree is only 3 levels deep, skip Building. If a level doesn't map cleanl
 
 ## 📦 Installation
 
-```bash
-bench get-app https://github.com/aravindsprint/warehouse_theatre_3d.git
-bench --site your-site.com install-app warehouse_theatre_3d
-bench --site your-site.com migrate
-bench build --app warehouse_theatre_3d
-bench restart
-```
+Available on the **Frappe Cloud Marketplace** — install it directly from your site's Marketplace Apps page, no manual setup required.
+
+For self-hosted benches, install it the same way you install any other Frappe app for your bench/site.
 
 Then open the app from the **/apps** screen, or go directly to `/warehouse-theatre-3d`.
 

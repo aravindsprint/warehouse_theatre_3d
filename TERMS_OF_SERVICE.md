@@ -74,4 +74,4 @@ document.
 
 ## 9. Contact
 
-For questions about these terms, contact: aravind_g@pss.com
+For questions about these terms, contact: aravindsprint@gmail.com

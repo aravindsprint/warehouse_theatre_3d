@@ -46,31 +46,37 @@ def get_companies():
 def get_warehouse_groups(company=None):
 	"""Return all Floor warehouses grouped under their Building."""
 	_require_view_permission()
-	cf = ''
+	params = []
 	if company:
 		abbr = frappe.db.get_value('Company', company, 'abbr')
 		if abbr:
-			cf = f"AND w.name LIKE '%%- {abbr}'"
-	return frappe.db.sql(f"""
-		SELECT
-			w.name              AS id,
-			w.warehouse_name    AS name,
-			w.parent_warehouse  AS parent_id,
-			pw.warehouse_name   AS parent_name,
-			COUNT(slot.name)    AS slot_count
-		FROM `tabWarehouse` w
-		LEFT JOIN `tabWarehouse` pw
-			ON pw.name = w.parent_warehouse
-		LEFT JOIN `tabWarehouse` slot
-			ON slot.parent_warehouse = w.name
-			AND slot.wt_warehouse_type = 'Slot'
-			AND slot.disabled = 0
-		WHERE w.wt_warehouse_type = 'Floor'
-		  AND w.disabled = 0
-		  {cf}
-		GROUP BY w.name
-		ORDER BY pw.warehouse_name, w.warehouse_name
-	""", as_dict=True)
+			company_filter = "AND w.name LIKE %s"
+			params.append("%- " + abbr)
+		else:
+			company_filter = ""
+	else:
+		company_filter = ""
+
+	query = (
+		"SELECT "
+		"w.name AS id, "
+		"w.warehouse_name AS name, "
+		"w.parent_warehouse AS parent_id, "
+		"pw.warehouse_name AS parent_name, "
+		"COUNT(slot.name) AS slot_count "
+		"FROM `tabWarehouse` w "
+		"LEFT JOIN `tabWarehouse` pw ON pw.name = w.parent_warehouse "
+		"LEFT JOIN `tabWarehouse` slot "
+		"ON slot.parent_warehouse = w.name "
+		"AND slot.wt_warehouse_type = 'Slot' "
+		"AND slot.disabled = 0 "
+		"WHERE w.wt_warehouse_type = 'Floor' "
+		"AND w.disabled = 0 "
+		+ company_filter +
+		" GROUP BY w.name "
+		"ORDER BY pw.warehouse_name, w.warehouse_name"
+	)
+	return frappe.db.sql(query, params, as_dict=True)
 
 
 @frappe.whitelist()
@@ -185,7 +191,6 @@ def save_slot_position(warehouse, row, col, row_gap=0):
 		'wt_col':     _int(col),
 		'wt_row_gap': _flt(row_gap),
 	})
-	frappe.db.commit()
 	return {'ok': True}
 
 
@@ -218,7 +223,6 @@ def save_stack_config(slot_warehouse, levels):
 			new_wh.wt_warehouse_type = 'Bin'
 			new_wh.company = slot_doc.company
 			new_wh.insert(ignore_permissions=True)
-	frappe.db.commit()
 	return {'ok': True}
 
 
@@ -243,7 +247,6 @@ def save_uom_capacity(warehouse, uom, capacity):
 			'capacity': _flt(capacity),
 		})
 		doc.insert(ignore_permissions=True)
-	frappe.db.commit()
 	return {'ok': True}
 
 

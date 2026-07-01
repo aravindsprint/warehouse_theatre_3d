@@ -69,4 +69,4 @@ always available at the URL where you found this document.
 
 ## Contact
 
-Questions about this privacy policy can be sent to: aravind_g@pss.com
+Questions about this privacy policy can be sent to: aravindsprint@gmail.com
