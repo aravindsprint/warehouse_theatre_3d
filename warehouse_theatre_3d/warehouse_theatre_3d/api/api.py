@@ -191,6 +191,41 @@ def save_slot_position(warehouse, row, col, row_gap=0):
 		'wt_col':     _int(col),
 		'wt_row_gap': _flt(row_gap),
 	})
+	# The standalone /warehouse-theatre-3d (www/PWA) page has no frappe.call, so its
+	# fallback fetch() calls this via a plain GET request - and Frappe rolls back the
+	# DB transaction at the end of GET requests by default. Commit explicitly so saves
+	# from that page actually persist (desk access already commits via POST+CSRF).
+	frappe.db.commit()
+	return {'ok': True}
+
+
+@frappe.whitelist()
+def get_floor_layout(group_warehouse):
+	"""Return the saved Floor Plan editor grid (rows/cells incl. span & aisle flags) for a Floor.
+
+	This is purely editor metadata - it does not drive the 3D scene (which reads
+	wt_row/wt_col/wt_row_gap off each Slot warehouse). It exists so aisle markers,
+	column spans, and custom row labels survive closing and reopening the editor,
+	since aisle cells have no underlying Slot warehouse to store that state on.
+	"""
+	_require_view_permission()
+	raw = frappe.db.get_value('Warehouse', group_warehouse, 'wt_floor_layout')
+	if not raw:
+		return {}
+	try:
+		return json.loads(raw)
+	except Exception:
+		return {}
+
+
+@frappe.whitelist()
+def save_floor_layout(group_warehouse, layout):
+	"""Persist the Floor Plan editor grid as JSON on the Floor warehouse."""
+	_require_edit_permission()
+	if not isinstance(layout, str):
+		layout = json.dumps(layout)
+	frappe.db.set_value('Warehouse', group_warehouse, 'wt_floor_layout', layout)
+	frappe.db.commit()  # see note in save_slot_position - GET requests roll back otherwise
 	return {'ok': True}
 
 
@@ -223,6 +258,7 @@ def save_stack_config(slot_warehouse, levels):
 			new_wh.wt_warehouse_type = 'Bin'
 			new_wh.company = slot_doc.company
 			new_wh.insert(ignore_permissions=True)
+	frappe.db.commit()  # see note in save_slot_position - GET requests roll back otherwise
 	return {'ok': True}
 
 
@@ -247,6 +283,7 @@ def save_uom_capacity(warehouse, uom, capacity):
 			'capacity': _flt(capacity),
 		})
 		doc.insert(ignore_permissions=True)
+	frappe.db.commit()  # see note in save_slot_position - GET requests roll back otherwise
 	return {'ok': True}
 
 

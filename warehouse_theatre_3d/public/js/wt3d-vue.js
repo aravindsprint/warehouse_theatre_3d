@@ -47,7 +47,7 @@ function call(method, args={}) {
     if (v !== null && v !== undefined && v !== '') params.set(k, String(v));
   }
   const url = '/api/method/' + fullMethod + (params.toString() ? '?'+params.toString() : '');
-  return fetch(url, { method:'GET', credentials:'same-origin', headers:{'Accept':'application/json'} })
+  return fetch(url, { method:'GET', credentials:'same-origin', cache:'no-store', headers:{'Accept':'application/json','Cache-Control':'no-cache'} })
     .then(r => r.json())
     .then(r => { if (r.message !== undefined) return r.message; throw new Error(r.exc||'API error'); });
 }
@@ -66,7 +66,7 @@ function callSetup(method, args={}) {
     if (v !== null && v !== undefined && v !== '') params.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
   }
   const url = '/api/method/' + fullMethod + (params.toString() ? '?'+params.toString() : '');
-  return fetch(url, { method:'GET', credentials:'same-origin', headers:{'Accept':'application/json'} })
+  return fetch(url, { method:'GET', credentials:'same-origin', cache:'no-store', headers:{'Accept':'application/json','Cache-Control':'no-cache'} })
     .then(r => r.json())
     .then(r => { if (r.message !== undefined) return r.message; throw new Error(r.exc||'API error'); });
 }
@@ -344,7 +344,7 @@ const CSS = `
 #wt-app.light .wt-divider{background:#e2e8f0}
 #wt-fp-ov{display:none;position:absolute;inset:0;background:rgba(0,0,0,.6);z-index:95;align-items:center;justify-content:center}
 #wt-fp-ov.open{display:flex}
-#wt-fp-modal{background:#13151e;border:1px solid rgba(255,255,255,.1);border-radius:14px;width:680px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.6);overflow:hidden;animation:wtFpIn .22s cubic-bezier(.34,1.56,.64,1)}
+#wt-fp-modal{position:relative;background:#13151e;border:1px solid rgba(255,255,255,.1);border-radius:14px;width:680px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.6);overflow:hidden;animation:wtFpIn .22s cubic-bezier(.34,1.56,.64,1)}
 @keyframes wtFpIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
 #wt-fp-hdr{display:flex;align-items:flex-start;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0}
 #wt-fp-title{font-size:14px;font-weight:700;color:#fff}
@@ -355,7 +355,11 @@ const CSS = `
 #wt-fp-footer{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid rgba(255,255,255,.07);flex-shrink:0}
 #wt-fp-footer-left{font-size:10px;color:rgba(255,255,255,.3)}
 #wt-fp-footer-right{display:flex;gap:8px}
-.wt-fp-row-wrap{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.wt-fp-row-wrap{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;margin-bottom:10px;overflow:hidden;transition:border-color .12s,background .12s}
+.wt-fp-row-wrap.drag-over{border-color:#3b82f6;background:rgba(59,130,246,.06)}
+.wt-fp-row-handle{cursor:grab;color:rgba(255,255,255,.3);font-size:13px;padding:2px 4px;user-select:none;flex-shrink:0}
+.wt-fp-row-handle:hover{color:rgba(255,255,255,.6)}
+.wt-fp-row-handle:active{cursor:grabbing}
 .wt-fp-row-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.06)}
 .wt-fp-row-lbl{font-size:10px;font-weight:700;color:rgba(255,255,255,.5);letter-spacing:.5px;flex:1}
 .wt-fp-row-lbl input{background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.15);color:#fff;font-size:10px;font-weight:700;width:120px;outline:none;padding:1px 3px}
@@ -387,8 +391,8 @@ const CSS = `
 .wt-fp-prev-cell.empty{background:rgba(255,255,255,.03);color:rgba(255,255,255,.2);border-style:dashed}
 .wt-fp-prev-cell.filled{background:rgba(59,130,246,.2);border-color:rgba(59,130,246,.5);color:#93c5fd}
 .wt-fp-prev-cell.aisle{background:repeating-linear-gradient(-45deg,rgba(255,255,255,.03) 0,rgba(255,255,255,.03) 2px,transparent 2px,transparent 6px);color:rgba(255,255,255,.2)}
-.wt-fp-save-ok{display:none;align-items:center;gap:6px;font-size:11px;color:#4ade80;margin-bottom:10px;padding:8px 10px;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:6px}
-.wt-fp-save-ok.show{display:flex}
+.wt-fp-save-ok{position:absolute;top:12px;left:50%;transform:translateX(-50%) translateY(-10px);display:flex;align-items:center;gap:6px;font-size:11px;color:#4ade80;padding:8px 14px;background:#132b1d;border:1px solid rgba(74,222,128,.35);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:30;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;white-space:nowrap}
+.wt-fp-save-ok.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .wt-fp-gap-ctrl{display:flex;align-items:center;gap:6px;margin-left:auto}
 .wt-fp-gap-lbl{font-size:9px;color:rgba(255,255,255,.3);white-space:nowrap}
 .wt-fp-gap-val{font-size:9px;color:#60a5fa;font-weight:700;min-width:18px;text-align:right}
@@ -468,6 +472,8 @@ const store = reactive({
   fpAllSlots: [],
   fpGroup: null,
   fpSaveOk: false,
+  fpDragIdx: null,
+  fpDragOverIdx: null,
   fpSaving: false,
   ttVisible: false,
   ttX: 0,
@@ -889,21 +895,34 @@ const actions = {
   },
 
 
-  enterAisleView(gapIndex=null) {
+  async enterAisleView(gapIndex=null) {
     if (!store.slots.length) return;
     const SW=2.2, SD=2.2, GAP=.6;
 
-    // Calculate row Z positions (same as buildScene)
-    const maxRow=Math.max(...store.slots.map(s=>s.row),0);
+    // Row Z positions must stay in sync with buildScene(): dense row indices
+    // 0..maxRow, using each row's row_gap where a real slot exists there.
+    const maxSlotRow=Math.max(...store.slots.map(s=>s.row),0);
     const maxCol=Math.max(...store.slots.map(s=>s.col),0);
+
+    // Prefer the explicit editor layout (which rows were marked "Aisle") over
+    // inferring aisles from gaps in slot row numbers - see fpSetCellAisle/wt_floor_layout.
+    let savedRows=null;
+    try {
+      const saved = store.curGrp ? await call('get_floor_layout',{group_warehouse:store.curGrp.id}) : null;
+      if (saved && Array.isArray(saved) && saved.length) savedRows=saved;
+    } catch(e){ console.error('WT: failed to load floor layout for aisle view', e); }
+
+    const aisleRowIdxs = savedRows
+      ? savedRows.reduce((acc,row,ri)=>{ if ((row.cells||[]).some(c=>c.aisle)) acc.push(ri); return acc; }, [])
+      : [];
+
+    const maxRow = Math.max(maxSlotRow, aisleRowIdxs.length ? Math.max(...aisleRowIdxs) : 0);
     let cumZ=0;
     const rowZOffset={};
-    const rowGaps={};
     for (let r=0;r<=maxRow;r++){
       rowZOffset[r]=cumZ;
       const rowSlots=store.slots.filter(s=>s.row===r);
       const rowGap=rowSlots.length?(parseFloat(rowSlots[0].row_gap)||0):0;
-      rowGaps[r]=rowGap;
       cumZ+=SD+GAP+rowGap;
     }
     const totalDepth=cumZ-GAP;
@@ -911,32 +930,26 @@ const actions = {
     const ox=-((maxCol+1)*(SW+GAP)-GAP)/2;
     const startX=ox+(maxCol/2)*(SW+GAP);
 
-    // Build list of aisle gaps (between consecutive rows)
-    const rows=[...new Set(store.slots.map(s=>s.row))].sort((a,b)=>a-b);
-    const aisleGaps=[];
-
-    // Gap before first row
-    aisleGaps.push({
-      label: `Before Row ${rows[0]+1}`,
-      z: oz+(rowZOffset[rows[0]]||0)-2,
-    });
-
-    // Gaps between rows
-    for (let i=0;i<rows.length-1;i++){
-      const r0=rows[i], r1=rows[i+1];
-      const z0=oz+(rowZOffset[r0]||0)+SD;
-      const z1=oz+(rowZOffset[r1]||0);
-      aisleGaps.push({
-        label: `Aisle between Row ${r0+1} & Row ${r1+1}`,
-        z: (z0+z1)/2,
-      });
+    let aisleGaps=[];
+    if (aisleRowIdxs.length) {
+      // Explicit mode: one stop per row the user actually marked "Aisle" in the editor.
+      aisleGaps = aisleRowIdxs.map(ri => ({
+        label: savedRows[ri].label || `Aisle Row ${ri+1}`,
+        z: oz + (rowZOffset[ri]||0) + SD/2,
+      }));
+    } else {
+      // Fallback for floors with no saved layout yet: infer from gaps between
+      // consecutive populated row numbers, same as before.
+      const rows=[...new Set(store.slots.map(s=>s.row))].sort((a,b)=>a-b);
+      aisleGaps.push({ label: `Before Row ${rows[0]+1}`, z: oz+(rowZOffset[rows[0]]||0)-2 });
+      for (let i=0;i<rows.length-1;i++){
+        const r0=rows[i], r1=rows[i+1];
+        const z0=oz+(rowZOffset[r0]||0)+SD;
+        const z1=oz+(rowZOffset[r1]||0);
+        aisleGaps.push({ label: `Aisle between Row ${r0+1} & Row ${r1+1}`, z: (z0+z1)/2 });
+      }
+      aisleGaps.push({ label: `After Row ${rows[rows.length-1]+1}`, z: oz+(rowZOffset[rows[rows.length-1]]||0)+SD+2 });
     }
-
-    // Gap after last row
-    aisleGaps.push({
-      label: `After Row ${rows[rows.length-1]+1}`,
-      z: oz+(rowZOffset[rows[rows.length-1]]||0)+SD+2,
-    });
 
     store.aisleGaps = aisleGaps;
     store.aisleGapIndex = null;
@@ -1159,13 +1172,17 @@ const actions = {
   },
 
   // Floor Plan
-  fpOpen(group, currentSlots) {
+  async fpOpen(group, currentSlots) {
     if (!group) {
       if (window.frappe) frappe.show_alert({message:'Select a warehouse group first',indicator:'orange'},3);
       return;
     }
     store.fpGroup=group;
     store.fpAllSlots=currentSlots||[];
+
+    // 1) Build a fallback grid purely from actual slot positions (wh/row/col/row_gap).
+    //    This is always correct for real slots, but has no memory of aisle markers,
+    //    column spans, or custom row labels - those live only in the saved layout JSON.
     const byPos={};
     currentSlots.forEach(sl=>{
       const r=sl.row||0, c=sl.col||0;
@@ -1173,8 +1190,9 @@ const actions = {
       byPos[r][c]=sl;
     });
     const rowIdxs=Object.keys(byPos).map(Number).sort((a,b)=>a-b);
+    let fallbackRows;
     if (rowIdxs.length){
-      store.fpRows=rowIdxs.map(ri=>{
+      fallbackRows=rowIdxs.map(ri=>{
         const colIdxs=Object.keys(byPos[ri]).map(Number).sort((a,b)=>a-b);
         const firstSlot=byPos[ri][colIdxs[0]];
         return {
@@ -1184,13 +1202,36 @@ const actions = {
         };
       });
     } else {
-      store.fpRows=[{label:'Row 1',cells:[{wh:'',span:1,aisle:false}],gap:0}];
+      fallbackRows=[{label:'Row 1',cells:[{wh:'',span:1,aisle:false}],gap:0}];
     }
+    store.fpRows=fallbackRows;
     store.fpSaveOk=false;
     store.fpOpen=true;
+
+    // 2) Try to load the saved editor layout (aisle flags, spans, labels) and use it
+    //    as-is, since it already encodes aisle cells at their correct grid position.
+    //    Slots not present in the saved layout are intentionally left out - use
+    //    "+ Add row" / "+ Cell" to place them explicitly.
+    try {
+      const saved = await call('get_floor_layout',{group_warehouse:group.id});
+      if (saved && Array.isArray(saved) && saved.length) {
+        const knownWh = new Set(currentSlots.map(sl=>sl.wh));
+        const mergedRows = saved.map(row=>({
+          label: row.label || 'Row',
+          gap: parseFloat(row.gap)||0,
+          cells: (row.cells||[]).map(cell=>{
+            const wh = (!cell.aisle && cell.wh && knownWh.has(cell.wh)) ? cell.wh : '';
+            return { wh, span: parseInt(cell.span)||1, aisle: !!cell.aisle };
+          }),
+        }));
+        if (mergedRows.length) store.fpRows = mergedRows;
+      }
+    } catch(e){
+      console.error('WT: failed to load saved floor layout, using slot positions only', e);
+    }
   },
 
-  fpClose() { store.fpOpen=false; },
+  fpClose() { store.fpOpen=false; clearTimeout(store._fpSaveOkTimer); store.fpSaveOk=false; },
 
   fpAddRow() {
     store.fpRows.push({label:`Row ${store.fpRows.length+1}`,cells:[{wh:'',span:1,aisle:false}],gap:0});
@@ -1205,6 +1246,34 @@ const actions = {
   fpSetRowLabel(ri,val) { store.fpRows[ri].label=val; },
   fpSetRowGap(ri,val) { store.fpRows[ri].gap=parseFloat(val)||0; },
 
+  fpRowDragStart(ri, ev) {
+    store.fpDragIdx = ri;
+    if (ev?.dataTransfer) {
+      ev.dataTransfer.effectAllowed = 'move';
+      try { ev.dataTransfer.setData('text/plain', String(ri)); } catch(e){}
+    }
+  },
+  fpRowDragOver(ri) {
+    if (store.fpDragIdx === null || store.fpDragIdx === ri) return;
+    store.fpDragOverIdx = ri;
+  },
+  fpRowDragLeave(ri) {
+    if (store.fpDragOverIdx === ri) store.fpDragOverIdx = null;
+  },
+  fpRowDrop(ri) {
+    const from = store.fpDragIdx;
+    store.fpDragOverIdx = null;
+    store.fpDragIdx = null;
+    if (from === null || from === ri) return;
+    const rows = store.fpRows;
+    const [moved] = rows.splice(from, 1);
+    rows.splice(ri, 0, moved);
+  },
+  fpRowDragEnd() {
+    store.fpDragIdx = null;
+    store.fpDragOverIdx = null;
+  },
+
   async fpSave() {
     store.fpSaving=true;
     try {
@@ -1216,8 +1285,14 @@ const actions = {
           }
         });
       });
+      // Persist the full editor grid (row labels, spans, aisle markers) separately -
+      // aisle cells have no warehouse to save a position for, so without this the
+      // "Aisle" checkbox state is lost the moment the editor is reopened.
+      saves.push(call('save_floor_layout',{group_warehouse:store.fpGroup.id, layout:JSON.stringify(store.fpRows)}));
       await Promise.all(saves);
       store.fpSaveOk=true;
+      clearTimeout(store._fpSaveOkTimer);
+      store._fpSaveOkTimer=setTimeout(()=>{store.fpSaveOk=false;},3000);
       if (window.frappe) frappe.show_alert({message:'Floor plan saved',indicator:'green'},3);
       await actions.selectGroup(store.fpGroup);
     } catch(e){
@@ -1603,8 +1678,8 @@ const FloorPlanModal = defineComponent({
           </div>
           <button class="wt-x-btn" @click="actions.fpClose()">✕</button>
         </div>
+        <div class="wt-fp-save-ok" :class="store.fpSaveOk?'show':''">✓ Layout saved! Reload 3D view to see changes.</div>
         <div id="wt-fp-body">
-          <div class="wt-fp-save-ok" :class="store.fpSaveOk?'show':''">✓ Layout saved! Reload 3D view to see changes.</div>
           <!-- Preview -->
           <div class="wt-fp-preview-wrap">
             <div class="wt-fp-preview-lbl">Layout preview</div>
@@ -1620,8 +1695,16 @@ const FloorPlanModal = defineComponent({
             </div>
           </div>
           <!-- Rows -->
-          <div v-for="(row, ri) in store.fpRows" :key="ri" class="wt-fp-row-wrap">
+          <div v-for="(row, ri) in store.fpRows" :key="ri" class="wt-fp-row-wrap"
+            :class="store.fpDragOverIdx===ri?'drag-over':''"
+            @dragover.prevent="actions.fpRowDragOver(ri)"
+            @dragleave="actions.fpRowDragLeave(ri)"
+            @drop.prevent="actions.fpRowDrop(ri)">
             <div class="wt-fp-row-hdr">
+              <span class="wt-fp-row-handle" title="Drag to reorder"
+                draggable="true"
+                @dragstart="actions.fpRowDragStart(ri,$event)"
+                @dragend="actions.fpRowDragEnd()">⠿</span>
               <div class="wt-fp-row-lbl">
                 <input :value="row.label" placeholder="Row label" @change="actions.fpSetRowLabel(ri,$event.target.value)"/>
               </div>
