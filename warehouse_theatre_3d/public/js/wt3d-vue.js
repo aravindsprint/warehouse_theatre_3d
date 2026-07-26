@@ -82,6 +82,9 @@ const CSS = `
 #wt-c{display:block;width:100%;height:100%}
 #wt-top{position:absolute;top:0;left:148px;right:0;display:flex;align-items:center;gap:10px;padding:9px 14px;background:linear-gradient(to bottom,rgba(12,14,20,.97) 55%,transparent);z-index:10;pointer-events:none}
 #wt-app.light #wt-top{background:rgba(240,242,245,.95);backdrop-filter:blur(4px)}
+#wt-search-wrap{position:relative;pointer-events:all;flex:1;max-width:280px}
+#wt-mob-menu{display:none;width:30px;height:30px;border-radius:7px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.08);cursor:pointer;align-items:center;justify-content:center;font-size:14px;pointer-events:all;flex-shrink:0}
+#wt-app.light #wt-mob-menu{border-color:rgba(0,0,0,.12);background:rgba(0,0,0,.05)}
 @media(max-width:600px){
   #wt-top{left:0;flex-wrap:wrap;padding:6px 8px;gap:5px;background:var(--wt-bg);border-bottom:1px solid var(--wt-border)}
   #wt-brand{display:none}
@@ -92,18 +95,20 @@ const CSS = `
   .wt-pv{font-size:12px}
   .wt-pl{font-size:8px}
   .wt-sw-btn{height:28px;padding:0 10px;font-size:11px}
-  #wt-bot{left:0}
+  #wt-bot{left:0;justify-content:center;padding:8px 10px}
+  #wt-hint{display:none}
+  #wt-legend{flex-wrap:wrap;justify-content:center;gap:6px 10px}
   #wt-view2d{left:0;top:80px}
-  #wt-sb{transform:translateX(-100%);transition:transform .28s cubic-bezier(.34,1.56,.64,1),background .3s}
+  #wt-sb{width:min(210px,78vw);transform:translateX(-100%);transition:transform .28s cubic-bezier(.34,1.56,.64,1),background .3s}
   #wt-sb.mobile-open{transform:translateX(0)}
   #wt-sb-overlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:14}
   #wt-sb-overlay.show{display:block}
   #wt-mob-menu{display:flex}
+  #wt-dp{width:min(260px,82vw)}
+  #wt-cfg-modal{width:min(330px,calc(100vw - 24px))}
+  #wt-aisle-picker-box{width:min(340px,calc(100vw - 32px));min-width:0}
   .wt-3d-wrap-mobile{top:52px!important}
 }
-#wt-search-wrap{position:relative;pointer-events:all;flex:1;max-width:280px}
-#wt-mob-menu{display:none;width:30px;height:30px;border-radius:7px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.08);cursor:pointer;align-items:center;justify-content:center;font-size:14px;pointer-events:all;flex-shrink:0}
-#wt-app.light #wt-mob-menu{border-color:rgba(0,0,0,.12);background:rgba(0,0,0,.05)}
 #wt-aisle-picker{position:absolute;inset:0;background:rgba(0,0,0,.65);z-index:80;display:flex;align-items:center;justify-content:center}
 #wt-aisle-picker-box{background:#13151e;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:20px;min-width:280px;max-width:360px;box-shadow:0 24px 64px rgba(0,0,0,.6);animation:wtCfgIn .2s cubic-bezier(.34,1.56,.64,1)}
 .wt-aisle-picker-title{font-size:14px;font-weight:700;color:#fff;margin-bottom:4px}
@@ -1145,6 +1150,10 @@ const actions = {
     app.classList.toggle('dark',store.isDark);
     app.classList.toggle('light',!store.isDark);
     if (store.curView==='3d' && store.slots.length) engine.buildScene(filteredSlots());
+  },
+
+  toggleSidebar() {
+    store.sidebarOpen = !store.sidebarOpen;
   },
 
   setView(v) {
