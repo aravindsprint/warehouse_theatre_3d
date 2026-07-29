@@ -316,3 +316,185 @@ def get_user_access():
 		"can_edit": bool(user_roles & EDIT_ROLES),
 		"setup_complete": bool(frappe.db.exists("Warehouse", {"wt_warehouse_type": ["is", "set"]})),
 	}
+
+
+# ─────────────────────────────────────────────────────────────
+# WAREHOUSE CRUD  (Manage Warehouses panel)
+# ─────────────────────────────────────────────────────────────
+
+def _default_is_group(wt_warehouse_type):
+	"""Building/Floor/Slot are containers by convention; Bin is the leaf stock warehouse."""
+	return 0 if wt_warehouse_type == 'Bin' else 1
+
+
+@frappe.whitelist()
+def get_uom_list():
+	"""UOM options for the WT UOM Capacities table in the warehouse form."""
+	_require_view_permission()
+	return frappe.get_all('UOM', fields=['name'], order_by='name asc', pluck='name')
+
+
+@frappe.whitelist()
+def get_parent_warehouse_options(wt_warehouse_type, company=None):
+	"""Valid parents for a given Warehouse Type (Theatre): one theatre level up.
+	Building's valid parent is the company's root warehouse (e.g. 'All Warehouses - ABBR')."""
+	_require_view_permission()
+
+	parent_role = {'Floor': 'Building', 'Slot': 'Floor', 'Bin': 'Slot'}.get(wt_warehouse_type)
+	if parent_role:
+		filters = {'wt_warehouse_type': parent_role, 'disabled': 0}
+		if company:
+			filters['company'] = company
+		return frappe.get_all(
+			'Warehouse', filters=filters,
+			fields=['name', 'warehouse_name'], order_by='warehouse_name asc'
+		)
+
+	if wt_warehouse_type == 'Building':
+		filters = {'is_group': 1, 'parent_warehouse': ['in', ['', None]]}
+		if company:
+			filters['company'] = company
+		return frappe.get_all(
+			'Warehouse', filters=filters,
+			fields=['name', 'warehouse_name'], order_by='warehouse_name asc'
+		)
+
+	return []
+
+
+@frappe.whitelist()
+def get_warehouse_manage_list(company=None):
+	"""Full warehouse list (all theatre roles, incl. disabled) for the Manage Warehouses panel."""
+	_require_edit_permission()
+	filters = {}
+	if company:
+		filters['company'] = company
+	return frappe.get_all(
+		'Warehouse',
+		filters=filters,
+		fields=['name', 'warehouse_name', 'wt_warehouse_type', 'parent_warehouse',
+				'is_group', 'disabled', 'company'],
+		order_by='disabled asc, wt_warehouse_type asc, warehouse_name asc',
+	)
+
+
+@frappe.whitelist()
+def get_warehouse_detail(warehouse):
+	"""Full field set for the edit form, incl. the WT UOM Capacities child table."""
+	_require_edit_permission()
+	doc = frappe.get_doc('Warehouse', warehouse)
+	return {
+		'name': doc.name,
+		'warehouse_name': doc.warehouse_name,
+		'company': doc.company,
+		'wt_warehouse_type': doc.get('wt_warehouse_type'),
+		'parent_warehouse': doc.parent_warehouse,
+		'is_group': doc.is_group,
+		'disabled': doc.disabled,
+		'wt_row': doc.get('wt_row') or 0,
+		'wt_col': doc.get('wt_col') or 0,
+		'wt_row_gap': doc.get('wt_row_gap') or 0,
+		'uom_capacities': [
+			{'uom': r.uom, 'capacity': r.capacity}
+			for r in (doc.get('wt_uom_capacities') or [])
+		],
+	}
+
+
+@frappe.whitelist()
+def create_warehouse(data):
+	_require_edit_permission()
+	if isinstance(data, str):
+		data = json.loads(data)
+
+	warehouse_name = (data.get('warehouse_name') or '').strip()
+	if not warehouse_name:
+		frappe.throw('Warehouse Name is required.')
+
+	wt_type = data.get('wt_warehouse_type')
+	if wt_type not in ('Building', 'Floor', 'Slot', 'Bin'):
+		frappe.throw('A valid Warehouse Type (Theatre) is required.')
+
+	is_group = data.get('is_group')
+	is_group = _int(is_group) if is_group is not None else _default_is_group(wt_type)
+
+	doc = frappe.new_doc('Warehouse')
+	doc.warehouse_name = warehouse_name
+	doc.company = data.get('company')
+	doc.wt_warehouse_type = wt_type
+	doc.parent_warehouse = data.get('parent_warehouse') or None
+	doc.is_group = is_group
+	doc.wt_row = _int(data.get('wt_row'))
+	doc.wt_col = _int(data.get('wt_col'))
+	doc.wt_row_gap = _flt(data.get('wt_row_gap'))
+	for row in (data.get('uom_capacities') or []):
+		if not row.get('uom'):
+			continue
+		doc.append('wt_uom_capacities', {
+			'uom': row.get('uom'),
+			'capacity': _flt(row.get('capacity')),
+		})
+
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()  # see note in save_slot_position - GET requests roll back otherwise
+	return {'ok': True, 'name': doc.name}
+
+
+@frappe.whitelist()
+def update_warehouse(warehouse, data):
+	_require_edit_permission()
+	if isinstance(data, str):
+		data = json.loads(data)
+
+	doc = frappe.get_doc('Warehouse', warehouse)
+
+	if (data.get('warehouse_name') or '').strip():
+		doc.warehouse_name = data['warehouse_name'].strip()
+	if data.get('wt_warehouse_type') in ('Building', 'Floor', 'Slot', 'Bin'):
+		doc.wt_warehouse_type = data['wt_warehouse_type']
+	if 'parent_warehouse' in data:
+		doc.parent_warehouse = data.get('parent_warehouse') or None
+	if 'is_group' in data and data.get('is_group') is not None:
+		doc.is_group = _int(data.get('is_group'))
+	if 'company' in data and data.get('company'):
+		doc.company = data.get('company')
+
+	doc.wt_row = _int(data.get('wt_row'))
+	doc.wt_col = _int(data.get('wt_col'))
+	doc.wt_row_gap = _flt(data.get('wt_row_gap'))
+
+	doc.set('wt_uom_capacities', [])
+	for row in (data.get('uom_capacities') or []):
+		if not row.get('uom'):
+			continue
+		doc.append('wt_uom_capacities', {
+			'uom': row.get('uom'),
+			'capacity': _flt(row.get('capacity')),
+		})
+
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()  # see note in save_slot_position - GET requests roll back otherwise
+	return {'ok': True, 'name': doc.name}
+
+
+@frappe.whitelist()
+def delete_warehouse(warehouse):
+	"""Hard-delete when safe; falls back to disabling when the warehouse has
+	stock/transaction history (Frappe would raise LinkExistsError on delete)."""
+	_require_edit_permission()
+
+	if frappe.db.exists('Warehouse', {'parent_warehouse': warehouse}):
+		frappe.throw('This warehouse has child warehouses. Delete or reassign them first.')
+
+	try:
+		frappe.delete_doc('Warehouse', warehouse, ignore_permissions=True)
+		frappe.db.commit()
+		return {'ok': True, 'disabled': False, 'message': 'Warehouse deleted.'}
+	except Exception:
+		frappe.db.rollback()
+		frappe.db.set_value('Warehouse', warehouse, 'disabled', 1)
+		frappe.db.commit()
+		return {
+			'ok': True, 'disabled': True,
+			'message': 'This warehouse has transaction history, so it was disabled instead of permanently deleted.',
+		}

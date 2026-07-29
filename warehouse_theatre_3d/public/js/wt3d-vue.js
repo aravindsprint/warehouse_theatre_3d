@@ -442,6 +442,79 @@ const CSS = `
 .wt-setup-stat-lbl{font-size:10px;color:var(--wt-text3);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
 .wt-setup-empty{text-align:center;padding:40px 20px}
 .wt-setup-empty-icon{font-size:40px;margin-bottom:12px;opacity:.4}
+
+/* Manage Warehouses (CRUD) */
+#wt-wm-ov{display:none;position:absolute;inset:0;background:rgba(0,0,0,.6);z-index:85;align-items:center;justify-content:center}
+#wt-wm-ov.open{display:flex}
+#wt-wm-modal{background:#13151e;border:1px solid rgba(255,255,255,.1);border-radius:12px;width:400px;max-width:calc(100vw - 24px);max-height:82%;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.6);overflow:hidden;animation:wtCfgIn .2s cubic-bezier(.34,1.56,.64,1)}
+.wt-wm-body{flex:1;overflow-y:auto;padding:10px 14px 14px}
+.wt-wm-body::-webkit-scrollbar{width:3px}
+.wt-wm-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:10px}
+.wt-wm-add-btn{width:100%;height:32px;border-radius:7px;border:1px dashed rgba(59,130,246,.4);background:rgba(59,130,246,.06);color:#60a5fa;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;margin-bottom:10px}
+.wt-wm-add-btn:hover{background:rgba(59,130,246,.14)}
+.wt-wm-search-wrap{position:relative;margin-bottom:8px}
+.wt-wm-search{width:100%;height:32px;border-radius:7px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#fff;font-size:11px;padding:0 28px;outline:none;box-sizing:border-box;transition:border-color .15s}
+.wt-wm-search::placeholder{color:rgba(255,255,255,.3)}
+.wt-wm-search:focus{border-color:#3b82f6}
+.wt-wm-search-ico{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:11px;color:rgba(255,255,255,.3);pointer-events:none}
+.wt-wm-search-clear{position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:11px;color:rgba(255,255,255,.35);cursor:pointer;background:none;border:none;padding:2px;line-height:1}
+.wt-wm-search-clear:hover{color:#fff}
+.wt-wm-count{font-size:9px;color:rgba(255,255,255,.3);margin-bottom:8px;padding:0 2px}
+.wt-wm-row{display:flex;align-items:center;gap:8px;padding:8px 9px;background:rgba(255,255,255,.04);border-radius:7px;border:1px solid rgba(255,255,255,.07);margin-bottom:5px}
+.wt-wm-row-main{flex:1;min-width:0}
+.wt-wm-row-name{font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wt-wm-row-meta{font-size:9px;color:rgba(255,255,255,.35);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wt-wm-badge{font-size:8px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:2px 6px;border-radius:10px;flex-shrink:0}
+.wt-wm-badge.Building{background:rgba(167,139,250,.18);color:#a78bfa}
+.wt-wm-badge.Floor{background:rgba(96,165,250,.18);color:#60a5fa}
+.wt-wm-badge.Slot{background:rgba(74,222,128,.18);color:#4ade80}
+.wt-wm-badge.Bin{background:rgba(251,191,36,.18);color:#fbbf24}
+.wt-wm-badge.disabled{background:rgba(248,113,113,.18);color:#f87171}
+.wt-wm-icon-btn{width:24px;height:24px;border-radius:5px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:rgba(255,255,255,.6);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0}
+.wt-wm-icon-btn:hover{background:rgba(255,255,255,.14);color:#fff}
+.wt-wm-icon-btn.danger:hover{background:rgba(248,113,113,.2);color:#f87171}
+.wt-wm-empty{text-align:center;padding:30px 10px;color:rgba(255,255,255,.3);font-size:11px}
+
+/* Warehouse create/edit form */
+#wt-whform-ov{display:none;position:absolute;inset:0;background:rgba(0,0,0,.65);z-index:90;align-items:center;justify-content:center}
+#wt-whform-ov.open{display:flex}
+#wt-whform-modal{background:#13151e;border:1px solid rgba(255,255,255,.1);border-radius:12px;width:360px;max-width:calc(100vw - 24px);max-height:86%;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.6);overflow:hidden;animation:wtCfgIn .2s cubic-bezier(.34,1.56,.64,1)}
+.wt-whform-body{flex:1;overflow-y:auto;padding:14px}
+.wt-whform-body::-webkit-scrollbar{width:3px}
+.wt-whform-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:10px}
+.wt-whform-field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.wt-whform-field label{font-size:10px;color:rgba(255,255,255,.5);font-weight:600}
+.wt-whform-field input,.wt-whform-field select{height:32px;padding:0 10px;border-radius:7px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#fff;font-size:11px;outline:none;width:100%;box-sizing:border-box}
+.wt-whform-field input:focus,.wt-whform-field select:focus{border-color:#3b82f6}
+.wt-whform-field select option{background:#13151e;color:#fff}
+.wt-whform-hint{font-size:9px;color:rgba(255,255,255,.3)}
+.wt-whform-row2{display:flex;gap:8px}
+.wt-whform-row2>.wt-whform-field{flex:1}
+.wt-whform-check{display:flex;align-items:center;gap:7px;font-size:11px;color:rgba(255,255,255,.7);margin-bottom:12px;cursor:pointer}
+.wt-whform-check input{width:14px;height:14px;flex-shrink:0}
+.wt-whform-uom-row{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.wt-whform-uom-row select{flex:1.4;height:30px;border-radius:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#fff;font-size:10px;padding:0 8px}
+.wt-whform-uom-row input{flex:1;height:30px;border-radius:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#fff;font-size:10px;padding:0 8px;outline:none;box-sizing:border-box}
+.wt-whform-err{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#f87171;font-size:10px;padding:8px 10px;border-radius:7px;margin-bottom:12px;line-height:1.5}
+.wt-whform-footer{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid rgba(255,255,255,.07);flex-shrink:0}
+.wt-whform-footer-right{display:flex;gap:8px}
+.wt-btn-danger-text{background:none;border:none;color:#f87171;font-size:10px;cursor:pointer;padding:6px 4px}
+.wt-btn-danger-text:hover{text-decoration:underline}
+.wt-btn-save:disabled,.wt-btn-delete:disabled{opacity:.6;cursor:default}
+
+/* Delete confirmation */
+#wt-whdel-ov{display:none;position:absolute;inset:0;background:rgba(0,0,0,.7);z-index:95;align-items:center;justify-content:center}
+#wt-whdel-ov.open{display:flex}
+#wt-whdel-box{background:#13151e;border:1px solid rgba(255,255,255,.1);border-radius:12px;width:290px;max-width:calc(100vw - 24px);padding:18px;box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.wt-whdel-title{font-size:13px;font-weight:700;margin-bottom:6px;color:#fff}
+.wt-whdel-msg{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:16px;line-height:1.5}
+.wt-whdel-actions{display:flex;justify-content:flex-end;gap:8px}
+.wt-btn-delete{height:32px;padding:0 14px;border-radius:7px;border:none;background:#dc2626;color:#fff;font-size:11px;font-weight:700;cursor:pointer}
+.wt-btn-delete:hover{background:#b91c1c}
+@media(max-width:600px){
+  #wt-wm-modal{width:calc(100vw - 24px)}
+  #wt-whform-modal{width:calc(100vw - 24px)}
+}
 `;
 
 /* ─────────────────────────────────────────────────────────────
@@ -492,6 +565,27 @@ const store = reactive({
   _aisleStartX: 0,
   canEdit: false,
   canView: true,
+  // Manage Warehouses (CRUD)
+  whManageOpen: false,
+  whManageList: [],
+  whManageLoading: false,
+  whManageSearch: '',
+  whFormOpen: false,
+  whFormMode: 'create',   // 'create' | 'edit'
+  whFormLoading: false,
+  whFormSaving: false,
+  whFormError: '',
+  whFormLockType: false,  // true when opened via "+ Add level" - context is fixed to Bin under a known Slot
+  whForm: {
+    name: null, warehouse_name: '', company: '', wt_warehouse_type: 'Slot',
+    parent_warehouse: '', is_group: true, wt_row: 0, wt_col: 0, wt_row_gap: 0,
+    uom_capacities: [],
+  },
+  whParentOptions: [],
+  whCompanies: [],
+  whUomOptions: [],
+  whDeleteTarget: null,
+  whDeleting: false,
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -1125,23 +1219,223 @@ const actions = {
 
   closeCfg() { store.cfgOpen=false; },
 
-  addLv() {
-    const n=store.cfgLvs.length+1;
-    store.cfgLvs.push({wh:`${store.cfgSlot.wh}-L${n}`,label:`L${n}`,uoms:[],items:[]});
+  // Bins (stack levels) are now created/edited/deleted through the same
+  // create_warehouse/update_warehouse/delete_warehouse endpoints used by
+  // Manage Warehouses, so "Configure slot" is just a slot-scoped view over
+  // the same Bin CRUD instead of its own separate save/delete pathway.
+  addBinToSlot() {
+    if (!store.cfgSlot) return;
+    actions.openWhForm('create', null, store.cfgSlot.wh);
   },
 
-  delLv(i) {
-    store.cfgLvs.splice(i,1);
-    store.cfgLvs.forEach((lv,idx)=>{ lv.label=`L${idx+1}`; lv.wh=`${store.cfgSlot.wh}-L${idx+1}`; });
+  editBinFromSlot(lvWh) {
+    actions.openWhForm('edit', lvWh);
+  },
+
+  deleteBinFromSlot(lv) {
+    actions.confirmDeleteWh({ name: lv.wh, warehouse_name: lv.label });
+  },
+
+  // Keeps the Configure Slot modal's snapshot in sync after a Bin create/
+  // edit/delete happens in a modal stacked on top of it.
+  refreshCfgFromSlots() {
+    if (!store.cfgOpen || !store.cfgSlot) return;
+    const updated = store.slots.find(s => s.wh === store.cfgSlot.wh);
+    store.cfgSlot = updated || null;
+    store.cfgLvs = updated ? JSON.parse(JSON.stringify(updated.levels)) : [];
   },
 
   async saveCfg(labelVal) {
     if (!store.cfgSlot){ actions.closeCfg(); return; }
-    if (labelVal) store.cfgSlot.label=labelVal;
-    store.cfgSlot.levels=JSON.parse(JSON.stringify(store.cfgLvs));
-    if (store.curView==='3d') engine.buildScene(filteredSlots());
-    call('save_stack_config',{slot_warehouse:store.cfgSlot.wh,levels:JSON.stringify(store.cfgLvs)}).catch(()=>{});
+    const newLabel = (labelVal||'').trim();
+    if (newLabel && newLabel !== store.cfgSlot.label) {
+      try {
+        await call('update_warehouse', {
+          warehouse: store.cfgSlot.wh,
+          data: JSON.stringify({ warehouse_name: newLabel }),
+        });
+        if (window.frappe) frappe.show_alert({message:'Slot renamed', indicator:'green'}, 3);
+        await actions.loadGroups();
+        if (store.curGrp) await actions.selectGroup(store.curGrp);
+      } catch(e) {
+        if (window.frappe) frappe.show_alert({message:'Rename failed: '+e.message, indicator:'red'}, 5);
+        return; // keep the modal open so the label edit isn't lost
+      }
+    }
     actions.closeCfg();
+  },
+
+  /* ── MANAGE WAREHOUSES (CRUD) ── */
+  async openWhManage() {
+    store.whManageOpen = true;
+    store.whManageSearch = '';
+    await actions.loadWhManageList();
+  },
+
+  closeWhManage() { store.whManageOpen = false; store.whManageSearch = ''; },
+
+  clearWhManageSearch() { store.whManageSearch = ''; },
+
+  async loadWhManageList() {
+    store.whManageLoading = true;
+    try {
+      store.whManageList = (await call('get_warehouse_manage_list')) || [];
+    } catch(e) {
+      console.error('WT: manage list', e);
+      if (window.frappe) frappe.show_alert({message:'Failed to load warehouses: '+e.message, indicator:'red'}, 5);
+    } finally {
+      store.whManageLoading = false;
+    }
+  },
+
+  async openWhForm(mode, warehouseName=null, presetParent=null) {
+    store.whFormError = '';
+    store.whFormMode = mode;
+    store.whFormOpen = true;
+    store.whFormLockType = !!presetParent;
+
+    if (!store.whCompanies.length) {
+      try { store.whCompanies = (await call('get_companies')) || []; } catch(e){ console.error('WT: companies', e); }
+    }
+    if (!store.whUomOptions.length) {
+      try { store.whUomOptions = (await call('get_uom_list')) || []; } catch(e){ console.error('WT: uoms', e); }
+    }
+
+    if (mode === 'edit' && warehouseName) {
+      store.whFormLoading = true;
+      try {
+        const d = await call('get_warehouse_detail', {warehouse: warehouseName});
+        store.whForm = {
+          name: d.name,
+          warehouse_name: d.warehouse_name || '',
+          company: d.company || '',
+          wt_warehouse_type: d.wt_warehouse_type || 'Slot',
+          parent_warehouse: d.parent_warehouse || '',
+          is_group: !!d.is_group,
+          wt_row: d.wt_row || 0,
+          wt_col: d.wt_col || 0,
+          wt_row_gap: d.wt_row_gap || 0,
+          uom_capacities: (d.uom_capacities||[]).map(r=>({uom:r.uom, capacity:r.capacity})),
+        };
+      } catch(e) {
+        store.whFormError = 'Failed to load warehouse: '+e.message;
+      } finally {
+        store.whFormLoading = false;
+      }
+    } else if (presetParent) {
+      // "+ Add level" from Configure Slot - creating a Bin directly under a known Slot.
+      store.whFormLoading = true;
+      try {
+        const parentDetail = await call('get_warehouse_detail', {warehouse: presetParent});
+        store.whForm = {
+          name: null, warehouse_name: '',
+          company: parentDetail.company || store.whCompanies[0]?.name || '',
+          wt_warehouse_type: 'Bin', parent_warehouse: presetParent, is_group: false,
+          wt_row: 0, wt_col: 0, wt_row_gap: 0, uom_capacities: [],
+        };
+      } catch(e) {
+        store.whFormError = 'Failed to load slot: '+e.message;
+        store.whForm = {
+          name: null, warehouse_name: '', company: store.whCompanies[0]?.name || '',
+          wt_warehouse_type: 'Bin', parent_warehouse: presetParent, is_group: false,
+          wt_row: 0, wt_col: 0, wt_row_gap: 0, uom_capacities: [],
+        };
+      } finally {
+        store.whFormLoading = false;
+      }
+    } else {
+      store.whForm = {
+        name: null, warehouse_name: '',
+        company: store.whCompanies[0]?.name || '',
+        wt_warehouse_type: 'Slot', parent_warehouse: '', is_group: false,
+        wt_row: 0, wt_col: 0, wt_row_gap: 0, uom_capacities: [],
+      };
+    }
+    await actions.refreshWhParentOptions();
+  },
+
+  closeWhForm() { store.whFormOpen = false; },
+
+  async refreshWhParentOptions() {
+    const t = store.whForm.wt_warehouse_type;
+    try {
+      store.whParentOptions = await call('get_parent_warehouse_options', {
+        wt_warehouse_type: t, company: store.whForm.company || undefined,
+      }) || [];
+    } catch(e) {
+      console.error('WT: parent options', e);
+      store.whParentOptions = [];
+    }
+  },
+
+  onWhTypeChange() {
+    store.whForm.is_group = store.whForm.wt_warehouse_type !== 'Bin';
+    store.whForm.parent_warehouse = '';
+    actions.refreshWhParentOptions();
+  },
+
+  addWhUomRow() { store.whForm.uom_capacities.push({uom:'', capacity:0}); },
+  removeWhUomRow(i) { store.whForm.uom_capacities.splice(i,1); },
+
+  async saveWh() {
+    if (!store.whForm.warehouse_name?.trim()) { store.whFormError = 'Warehouse Name is required.'; return; }
+    if (!store.whForm.company) { store.whFormError = 'Company is required.'; return; }
+
+    store.whFormSaving = true;
+    store.whFormError = '';
+    const payload = {
+      warehouse_name: store.whForm.warehouse_name.trim(),
+      company: store.whForm.company,
+      wt_warehouse_type: store.whForm.wt_warehouse_type,
+      parent_warehouse: store.whForm.parent_warehouse || null,
+      is_group: store.whForm.is_group ? 1 : 0,
+      wt_row: store.whForm.wt_row || 0,
+      wt_col: store.whForm.wt_col || 0,
+      wt_row_gap: store.whForm.wt_row_gap || 0,
+      uom_capacities: (store.whForm.uom_capacities||[]).filter(r=>r.uom),
+    };
+    try {
+      if (store.whFormMode === 'edit') {
+        await call('update_warehouse', {warehouse: store.whForm.name, data: JSON.stringify(payload)});
+        if (window.frappe) frappe.show_alert({message:'Warehouse updated', indicator:'green'}, 3);
+      } else {
+        await call('create_warehouse', {data: JSON.stringify(payload)});
+        if (window.frappe) frappe.show_alert({message:'Warehouse created', indicator:'green'}, 3);
+      }
+      store.whFormOpen = false;
+      if (store.whManageOpen) await actions.loadWhManageList();
+      await actions.loadGroups();
+      if (store.curGrp) await actions.selectGroup(store.curGrp);
+      actions.refreshCfgFromSlots();
+    } catch(e) {
+      store.whFormError = e.message || 'Save failed.';
+    } finally {
+      store.whFormSaving = false;
+    }
+  },
+
+  confirmDeleteWh(row) { store.whDeleteTarget = row; },
+  cancelDeleteWh() { store.whDeleteTarget = null; },
+
+  async deleteWh() {
+    if (!store.whDeleteTarget) return;
+    store.whDeleting = true;
+    try {
+      const res = await call('delete_warehouse', {warehouse: store.whDeleteTarget.name});
+      if (window.frappe) {
+        frappe.show_alert({message: res.message || 'Warehouse deleted', indicator: res.disabled?'orange':'green'}, 4);
+      }
+      if (store.whFormOpen && store.whForm.name === store.whDeleteTarget.name) store.whFormOpen = false;
+      store.whDeleteTarget = null;
+      if (store.whManageOpen) await actions.loadWhManageList();
+      await actions.loadGroups();
+      if (store.curGrp) await actions.selectGroup(store.curGrp);
+      actions.refreshCfgFromSlots();
+    } catch(e) {
+      if (window.frappe) frappe.show_alert({message:'Delete failed: '+e.message, indicator:'red'}, 5);
+    } finally {
+      store.whDeleting = false;
+    }
   },
 
   toggleTheme() {
@@ -1348,7 +1642,8 @@ const Sidebar = defineComponent({
         <div class="wt-sb-foot" v-if="store.canEdit">
           <button class="wt-sb-btn" style="margin-bottom:6px"
             @click="actions.fpOpen(store.curGrp, store.slots)">⋹ Edit floor plan</button>
-          <button class="wt-sb-btn" @click="actions.openCfg(null)">⚙ Configure slot</button>
+          <button class="wt-sb-btn" style="margin-bottom:6px" @click="actions.openCfg(null)">⚙ Configure slot</button>
+          <button class="wt-sb-btn" @click="actions.openWhManage()">🏬 Manage warehouses</button>
         </div>
       </div>
     </div>
@@ -1650,9 +1945,11 @@ const ConfigModal = defineComponent({
                 <div class="wt-cfg-lv-name">{{lv.label}}</div>
                 <div class="wt-cfg-lv-wh">{{lv.wh}}</div>
               </div>
-              <button class="wt-del-btn" @click="actions.delLv(i)">✕</button>
+              <button class="wt-wm-icon-btn" title="Edit bin" @click="actions.editBinFromSlot(lv.wh)">✎</button>
+              <button class="wt-del-btn" title="Delete bin" @click="actions.deleteBinFromSlot(lv)">✕</button>
             </div>
-            <button class="wt-cfg-add-btn" @click="actions.addLv()">+ Add level</button>
+            <button class="wt-cfg-add-btn" @click="actions.addBinToSlot()">+ Add level</button>
+            <span class="wt-whform-hint" style="display:block;margin-top:4px">Levels are Bin warehouses under this slot — add, edit, or delete them the same way as in Manage Warehouses.</span>
             <div class="wt-cfg-field">
               <label>Slot label</label>
               <input v-model="labelVal"/>
@@ -1662,6 +1959,191 @@ const ConfigModal = defineComponent({
         <div class="wt-cfg-footer">
           <button class="wt-btn-cancel" @click="actions.closeCfg()">Cancel</button>
           <button class="wt-btn-save" @click="actions.saveCfg(labelVal)">Save</button>
+        </div>
+      </div>
+    </div>
+  `,
+});
+
+/* ─────────────────────────────────────────────────────────────
+   COMPONENT: WarehouseManageModal  (list + CRUD entry points)
+───────────────────────────────────────────────────────────── */
+const WarehouseManageModal = defineComponent({
+  name: 'WarehouseManageModal',
+  setup(){
+    const filteredList = computed(()=>{
+      const q = store.whManageSearch.trim().toLowerCase();
+      if (!q) return store.whManageList;
+      return store.whManageList.filter(row => (
+        (row.warehouse_name||'').toLowerCase().includes(q) ||
+        (row.name||'').toLowerCase().includes(q) ||
+        (row.parent_warehouse||'').toLowerCase().includes(q) ||
+        (row.company||'').toLowerCase().includes(q) ||
+        (row.wt_warehouse_type||'').toLowerCase().includes(q)
+      ));
+    });
+    return { store, actions, filteredList };
+  },
+  template: `
+    <div id="wt-wm-ov" :class="store.whManageOpen?'open':''" @click.self="actions.closeWhManage()">
+      <div id="wt-wm-modal">
+        <div class="wt-cfg-hdr">
+          <div class="wt-cfg-hdr-title">Manage Warehouses</div>
+          <button class="wt-x-btn" @click="actions.closeWhManage()">✕</button>
+        </div>
+        <div class="wt-wm-body">
+          <button class="wt-wm-add-btn" @click="actions.openWhForm('create')">+ New warehouse</button>
+
+          <div class="wt-wm-search-wrap">
+            <span class="wt-wm-search-ico">🔍</span>
+            <input class="wt-wm-search" v-model="store.whManageSearch"
+              placeholder="Search by name, parent, company, or type…"/>
+            <button v-if="store.whManageSearch" class="wt-wm-search-clear"
+              @click="actions.clearWhManageSearch()">✕</button>
+          </div>
+          <div v-if="store.whManageSearch && !store.whManageLoading" class="wt-wm-count">
+            {{filteredList.length}} of {{store.whManageList.length}} warehouses
+          </div>
+
+          <div v-if="store.whManageLoading" class="wt-wm-empty">Loading…</div>
+          <div v-else-if="!store.whManageList.length" class="wt-wm-empty">No warehouses yet. Create one to get started.</div>
+          <div v-else-if="!filteredList.length" class="wt-wm-empty">No warehouses match "{{store.whManageSearch}}".</div>
+          <template v-else>
+            <div v-for="row in filteredList" :key="row.name" class="wt-wm-row">
+              <span class="wt-wm-badge" :class="row.disabled?'disabled':row.wt_warehouse_type">{{row.disabled?'Disabled':(row.wt_warehouse_type||'—')}}</span>
+              <div class="wt-wm-row-main">
+                <div class="wt-wm-row-name">{{row.warehouse_name}}</div>
+                <div class="wt-wm-row-meta">{{row.parent_warehouse || 'Top level'}}</div>
+              </div>
+              <button class="wt-wm-icon-btn" title="Edit" @click="actions.openWhForm('edit', row.name)">✎</button>
+              <button class="wt-wm-icon-btn danger" title="Delete" @click="actions.confirmDeleteWh(row)">🗑</button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  `,
+});
+
+/* ─────────────────────────────────────────────────────────────
+   COMPONENT: WarehouseFormModal  (create / edit)
+───────────────────────────────────────────────────────────── */
+const WarehouseFormModal = defineComponent({
+  name: 'WarehouseFormModal',
+  setup(){ return { store, actions }; },
+  template: `
+    <div id="wt-whform-ov" :class="store.whFormOpen?'open':''" @click.self="actions.closeWhForm()">
+      <div id="wt-whform-modal">
+        <div class="wt-cfg-hdr">
+          <div class="wt-cfg-hdr-title">{{store.whFormMode==='edit'?'Edit Warehouse':'New Warehouse'}}</div>
+          <button class="wt-x-btn" @click="actions.closeWhForm()">✕</button>
+        </div>
+        <div class="wt-whform-body">
+          <div v-if="store.whFormLoading" class="wt-wm-empty">Loading…</div>
+          <template v-else>
+            <div v-if="store.whFormError" class="wt-whform-err">{{store.whFormError}}</div>
+
+            <div class="wt-whform-field">
+              <label>Warehouse Name *</label>
+              <input v-model="store.whForm.warehouse_name" placeholder="e.g. G1"/>
+            </div>
+
+            <div class="wt-whform-field">
+              <label>Company *</label>
+              <select v-model="store.whForm.company" @change="actions.refreshWhParentOptions()">
+                <option value="" disabled>Select company…</option>
+                <option v-for="c in store.whCompanies" :key="c.name" :value="c.name">{{c.name}}</option>
+              </select>
+            </div>
+
+            <div class="wt-whform-field">
+              <label>Warehouse Type (Theatre) *</label>
+              <select v-model="store.whForm.wt_warehouse_type" :disabled="store.whFormLockType" @change="actions.onWhTypeChange()">
+                <option value="Building">Building</option>
+                <option value="Floor">Floor</option>
+                <option value="Slot">Slot</option>
+                <option value="Bin">Bin</option>
+              </select>
+              <span class="wt-whform-hint" v-if="!store.whFormLockType">Role of this warehouse in the 3D view</span>
+              <span class="wt-whform-hint" v-else>Adding a level (Bin) to this slot</span>
+            </div>
+
+            <div class="wt-whform-field">
+              <label>Parent Warehouse</label>
+              <select v-model="store.whForm.parent_warehouse" :disabled="store.whFormLockType">
+                <option value="">— none —</option>
+                <option v-for="p in store.whParentOptions" :key="p.name" :value="p.name">{{p.warehouse_name}}</option>
+              </select>
+              <span class="wt-whform-hint" v-if="!store.whParentOptions.length && !store.whFormLockType">
+                No {{store.whForm.wt_warehouse_type==='Building'?'root warehouse':'eligible parent'}} found for this company yet.
+              </span>
+            </div>
+
+            <label class="wt-whform-check" v-if="store.whForm.wt_warehouse_type!=='Bin'">
+              <input type="checkbox" v-model="store.whForm.is_group"/>
+              Is Group Warehouse
+            </label>
+
+            <template v-if="store.whForm.wt_warehouse_type==='Slot'">
+              <div class="wt-whform-row2">
+                <div class="wt-whform-field">
+                  <label>WT Row</label>
+                  <input type="number" v-model.number="store.whForm.wt_row"/>
+                </div>
+                <div class="wt-whform-field">
+                  <label>WT Column</label>
+                  <input type="number" v-model.number="store.whForm.wt_col"/>
+                </div>
+              </div>
+              <div class="wt-whform-field">
+                <label>Row Gap (Theatre)</label>
+                <input type="number" step="0.1" v-model.number="store.whForm.wt_row_gap"/>
+                <span class="wt-whform-hint">Extra spacing after this row in the 3D floor view</span>
+              </div>
+            </template>
+
+            <div class="wt-whform-field" v-if="store.whForm.wt_warehouse_type==='Bin'">
+              <label>WT UOM Capacities</label>
+              <div v-for="(row,i) in store.whForm.uom_capacities" :key="i" class="wt-whform-uom-row">
+                <select v-model="row.uom">
+                  <option value="" disabled>UOM…</option>
+                  <option v-for="u in store.whUomOptions" :key="u" :value="u">{{u}}</option>
+                </select>
+                <input type="number" v-model.number="row.capacity" placeholder="Capacity"/>
+                <button class="wt-del-btn" @click="actions.removeWhUomRow(i)">✕</button>
+              </div>
+              <button class="wt-cfg-add-btn" @click="actions.addWhUomRow()">+ Add UOM capacity</button>
+            </div>
+          </template>
+        </div>
+        <div class="wt-whform-footer">
+          <button v-if="store.whFormMode==='edit'" class="wt-btn-danger-text"
+            @click="actions.confirmDeleteWh({name:store.whForm.name, warehouse_name:store.whForm.warehouse_name})">Delete warehouse</button>
+          <span v-else></span>
+          <div class="wt-whform-footer-right">
+            <button class="wt-btn-cancel" @click="actions.closeWhForm()">Cancel</button>
+            <button class="wt-btn-save" :disabled="store.whFormSaving" @click="actions.saveWh()">{{store.whFormSaving?'Saving…':'Save'}}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+});
+
+/* ─────────────────────────────────────────────────────────────
+   COMPONENT: WarehouseDeleteConfirm
+───────────────────────────────────────────────────────────── */
+const WarehouseDeleteConfirm = defineComponent({
+  name: 'WarehouseDeleteConfirm',
+  setup(){ return { store, actions }; },
+  template: `
+    <div id="wt-whdel-ov" :class="store.whDeleteTarget?'open':''" @click.self="actions.cancelDeleteWh()">
+      <div id="wt-whdel-box" v-if="store.whDeleteTarget">
+        <div class="wt-whdel-title">Delete "{{store.whDeleteTarget.warehouse_name}}"?</div>
+        <div class="wt-whdel-msg">If this warehouse has stock or transaction history it will be disabled instead of permanently deleted. Warehouses with child warehouses can't be deleted until the children are removed or reassigned.</div>
+        <div class="wt-whdel-actions">
+          <button class="wt-btn-cancel" @click="actions.cancelDeleteWh()">Cancel</button>
+          <button class="wt-btn-delete" :disabled="store.whDeleting" @click="actions.deleteWh()">{{store.whDeleting?'Deleting…':'Delete'}}</button>
         </div>
       </div>
     </div>
@@ -2097,7 +2579,7 @@ const SetupWizard = defineComponent({
 ───────────────────────────────────────────────────────────── */
 const App = defineComponent({
   name: 'WarehouseTheatreVue',
-  components: { Sidebar, TopBar, BottomBar, Tooltip, DetailPanel, ItemModal, ConfigModal, FloorPlanModal, View3D, View2D, Loading, AislePicker, SetupWizard },
+  components: { Sidebar, TopBar, BottomBar, Tooltip, DetailPanel, ItemModal, ConfigModal, FloorPlanModal, WarehouseManageModal, WarehouseFormModal, WarehouseDeleteConfirm, View3D, View2D, Loading, AislePicker, SetupWizard },
   setup(){
     onMounted(async ()=>{
       // Keyboard shortcuts
@@ -2108,6 +2590,9 @@ const App = defineComponent({
           actions.closeItemModal();
           actions.fpClose();
           actions.clearSearch();
+          if (store.whDeleteTarget) actions.cancelDeleteWh();
+          else if (store.whFormOpen) actions.closeWhForm();
+          else if (store.whManageOpen) actions.closeWhManage();
           store.sidebarOpen=false;
         }
       });
@@ -2140,6 +2625,9 @@ const App = defineComponent({
         <ItemModal/>
         <ConfigModal/>
         <FloorPlanModal/>
+        <WarehouseManageModal/>
+        <WarehouseFormModal/>
+        <WarehouseDeleteConfirm/>
         <AislePicker/>
         <Loading/>
       </template>
