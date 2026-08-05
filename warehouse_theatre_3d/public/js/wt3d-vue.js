@@ -606,9 +606,10 @@ function filteredSlots() {
 
 function hudStats() {
   const slots = store.slots;
-  const total = slots.length;
-  const occ   = slots.filter(s=>hasStock(s)).length;
-  const qty   = slots.reduce((s,sl)=>s+sl.levels.reduce((ss,l)=>(l.uoms||[]).reduce((sss,u)=>sss+(u.qty||0),ss),s),0);
+  const bins  = slots.flatMap(sl => sl.levels);
+  const total = bins.length;
+  const occ   = bins.filter(l => (l.uoms||[]).some(u => u.qty > 0)).length;
+  const qty   = slots.reduce((s,sl)=>s+sl.levels.reduce((ss,l)=>(l.uoms||[]).reduce((sss,u)=>sss+(u.qty||0),ss),0),0);
   return { total, occ, free: total-occ, qty: fmtK(qty) };
 }
 
@@ -1697,7 +1698,7 @@ const TopBar = defineComponent({
         <span id="wt-search-tag-x" @click="clearSearch">✕</span>
       </div>
       <div class="wt-pills">
-        <div class="wt-pill"><div class="wt-pv">{{hud.total}}</div><div class="wt-pl">Slots</div></div>
+        <div class="wt-pill"><div class="wt-pv">{{hud.total}}</div><div class="wt-pl">Bins</div></div>
         <div class="wt-pill occ"><div class="wt-pv">{{hud.occ}}</div><div class="wt-pl">Active</div></div>
         <div class="wt-pill free"><div class="wt-pv">{{hud.free}}</div><div class="wt-pl">Empty</div></div>
         <div class="wt-pill qty"><div class="wt-pv">{{hud.qty}}</div><div class="wt-pl">Total qty</div></div>
