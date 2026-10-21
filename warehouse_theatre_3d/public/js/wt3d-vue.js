@@ -32,8 +32,15 @@ function lvKey(sl,lv)  { return sl.wh+'__'+lv.wh; }
 const API_PREFIX = 'warehouse_theatre_3d.warehouse_theatre_3d.api.api.';
 const SETUP_API_PREFIX = 'warehouse_theatre_3d.warehouse_theatre_3d.api.setup.';
 
+/* Methods that write. They are POST-only on the server: Frappe commits a POST
+   request when it succeeds and rolls back a GET, so no method commits by hand. */
+const WRITE_METHODS = new Set([
+  'save_slot_position', 'save_floor_layout', 'save_stack_config', 'save_uom_capacity',
+  'create_warehouse', 'update_warehouse', 'delete_warehouse', 'apply_depth_mapping',
+]);
+
 function call(method, args={}) {
-  return rpc(API_PREFIX + method, args, false);
+  return rpc(API_PREFIX + method, args, WRITE_METHODS.has(method));
 }
 
 /* Server error text from a Frappe JSON response (www/PWA context). */
@@ -85,22 +92,7 @@ function rpc(fullMethod, args={}, post=false) {
 }
 
 function callSetup(method, args={}) {
-  const fullMethod = SETUP_API_PREFIX + method;
-  if (window.frappe && frappe.call) {
-    return new Promise((res,rej) => frappe.call({
-      method: fullMethod, args,
-      callback: r => r.exc ? rej(new Error(r.exc)) : res(r.message),
-      error: rej,
-    }));
-  }
-  const params = new URLSearchParams();
-  for (const [k,v] of Object.entries(args||{})) {
-    if (v !== null && v !== undefined && v !== '') params.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
-  }
-  const url = '/api/method/' + fullMethod + (params.toString() ? '?'+params.toString() : '');
-  return fetch(url, { method:'GET', credentials:'same-origin', cache:'no-store', headers:{'Accept':'application/json','Cache-Control':'no-cache'} })
-    .then(r => r.json())
-    .then(r => { if (r.message !== undefined) return r.message; throw new Error(r.exc||'API error'); });
+  return rpc(SETUP_API_PREFIX + method, args, WRITE_METHODS.has(method));
 }
 
 /* ─────────────────────────────────────────────────────────────

@@ -47,34 +47,25 @@ def get_companies():
 def get_warehouse_groups(company=None):
 	"""Return all Floor warehouses grouped under their Building."""
 	_require_view_permission()
-	params = []
-	company_filter = ""
-	if company:
-		# Filter on the Warehouse.company field rather than the "- ABBR" name suffix,
-		# which breaks for warehouses that were renamed or created without the suffix.
-		company_filter = "AND w.company = %s"
-		params.append(company)
-
-	query = (
-		"SELECT "
-		"w.name AS id, "
-		"w.warehouse_name AS name, "
-		"w.parent_warehouse AS parent_id, "
-		"pw.warehouse_name AS parent_name, "
-		"COUNT(slot.name) AS slot_count "
-		"FROM `tabWarehouse` w "
-		"LEFT JOIN `tabWarehouse` pw ON pw.name = w.parent_warehouse "
-		"LEFT JOIN `tabWarehouse` slot "
-		"ON slot.parent_warehouse = w.name "
-		"AND slot.wt_warehouse_type = 'Slot' "
-		"AND slot.disabled = 0 "
-		"WHERE w.wt_warehouse_type = 'Floor' "
-		"AND w.disabled = 0 "
-		+ company_filter +
-		" GROUP BY w.name "
-		"ORDER BY pw.warehouse_name, w.warehouse_name"
+	# Filters on Warehouse.company rather than the "- ABBR" name suffix, which breaks
+	# for warehouses that were renamed or created without the suffix.
+	return frappe.db.sql(
+		"""
+		SELECT w.name AS id, w.warehouse_name AS name, w.parent_warehouse AS parent_id,
+		       pw.warehouse_name AS parent_name, COUNT(slot.name) AS slot_count
+		FROM `tabWarehouse` w
+		LEFT JOIN `tabWarehouse` pw ON pw.name = w.parent_warehouse
+		LEFT JOIN `tabWarehouse` slot
+		       ON slot.parent_warehouse = w.name
+		      AND slot.wt_warehouse_type = 'Slot' AND slot.disabled = 0
+		WHERE w.wt_warehouse_type = 'Floor' AND w.disabled = 0
+		  AND (%(company)s IS NULL OR w.company = %(company)s)
+		GROUP BY w.name
+		ORDER BY pw.warehouse_name, w.warehouse_name
+		""",
+		{"company": company or None},
+		as_dict=True,
 	)
-	return frappe.db.sql(query, params, as_dict=True)
 
 
 @frappe.whitelist()
@@ -181,7 +172,7 @@ def _get_items(level_wh):
 	""", (level_wh,), as_dict=True)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def save_slot_position(warehouse, row, col, row_gap=0):
 	_require_edit_permission()
 	frappe.db.set_value('Warehouse', warehouse, {
@@ -189,11 +180,6 @@ def save_slot_position(warehouse, row, col, row_gap=0):
 		'wt_col':     _int(col),
 		'wt_row_gap': _flt(row_gap),
 	})
-	# The standalone /warehouse-theatre-3d (www/PWA) page has no frappe.call, so its
-	# fallback fetch() calls this via a plain GET request - and Frappe rolls back the
-	# DB transaction at the end of GET requests by default. Commit explicitly so saves
-	# from that page actually persist (desk access already commits via POST+CSRF).
-	frappe.db.commit()
 	return {'ok': True}
 
 
@@ -216,18 +202,17 @@ def get_floor_layout(group_warehouse):
 		return {}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def save_floor_layout(group_warehouse, layout):
 	"""Persist the Floor Plan editor grid as JSON on the Floor warehouse."""
 	_require_edit_permission()
 	if not isinstance(layout, str):
 		layout = json.dumps(layout)
 	frappe.db.set_value('Warehouse', group_warehouse, 'wt_floor_layout', layout)
-	frappe.db.commit()  # see note in save_slot_position - GET requests roll back otherwise
 	return {'ok': True}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def save_stack_config(slot_warehouse, levels):
 	_require_edit_permission()
 	if isinstance(levels, str):
@@ -256,11 +241,10 @@ def save_stack_config(slot_warehouse, levels):
 			new_wh.wt_warehouse_type = 'Bin'
 			new_wh.company = slot_doc.company
 			new_wh.insert(ignore_permissions=True)
-	frappe.db.commit()  # see note in save_slot_position - GET requests roll back otherwise
 	return {'ok': True}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def save_uom_capacity(warehouse, uom, capacity):
 	_require_edit_permission()
 	# Check if row already exists
@@ -281,7 +265,6 @@ def save_uom_capacity(warehouse, uom, capacity):
 			'capacity': _flt(capacity),
 		})
 		doc.insert(ignore_permissions=True)
-	frappe.db.commit()  # see note in save_slot_position - GET requests roll back otherwise
 	return {'ok': True}
 
 
@@ -399,7 +382,7 @@ def get_warehouse_detail(warehouse):
 	}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_warehouse(data):
 	_require_edit_permission()
 	if isinstance(data, str):
@@ -434,11 +417,10 @@ def create_warehouse(data):
 		})
 
 	doc.insert(ignore_permissions=True)
-	frappe.db.commit()  # see note in save_slot_position - GET requests roll back otherwise
 	return {'ok': True, 'name': doc.name}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def update_warehouse(warehouse, data):
 	_require_edit_permission()
 	if isinstance(data, str):
@@ -471,11 +453,10 @@ def update_warehouse(warehouse, data):
 		})
 
 	doc.save(ignore_permissions=True)
-	frappe.db.commit()  # see note in save_slot_position - GET requests roll back otherwise
 	return {'ok': True, 'name': doc.name}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def delete_warehouse(warehouse):
 	"""Hard-delete when safe; falls back to disabling when the warehouse has
 	stock/transaction history (Frappe would raise LinkExistsError on delete)."""
@@ -484,14 +465,14 @@ def delete_warehouse(warehouse):
 	if frappe.db.exists('Warehouse', {'parent_warehouse': warehouse}):
 		frappe.throw('This warehouse has child warehouses. Delete or reassign them first.')
 
+	# Undo only the failed delete (savepoint), not the whole request.
+	frappe.db.savepoint("wt_delete_warehouse")
 	try:
 		frappe.delete_doc('Warehouse', warehouse, ignore_permissions=True)
-		frappe.db.commit()
 		return {'ok': True, 'disabled': False, 'message': 'Warehouse deleted.'}
 	except Exception:
-		frappe.db.rollback()
+		frappe.db.rollback(save_point="wt_delete_warehouse")
 		frappe.db.set_value('Warehouse', warehouse, 'disabled', 1)
-		frappe.db.commit()
 		return {
 			'ok': True, 'disabled': True,
 			'message': 'This warehouse has transaction history, so it was disabled instead of permanently deleted.',
