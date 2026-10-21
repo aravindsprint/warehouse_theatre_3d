@@ -33,23 +33,55 @@ const API_PREFIX = 'warehouse_theatre_3d.warehouse_theatre_3d.api.api.';
 const SETUP_API_PREFIX = 'warehouse_theatre_3d.warehouse_theatre_3d.api.setup.';
 
 function call(method, args={}) {
-  const fullMethod = API_PREFIX + method;
+  return rpc(API_PREFIX + method, args, false);
+}
+
+/* Server error text from a Frappe JSON response (www/PWA context). */
+function serverError(r) {
+  try {
+    if (r && r._server_messages) {
+      const msgs = JSON.parse(r._server_messages).map(m => { try { return JSON.parse(m).message; } catch(e){ return m; } });
+      const txt = msgs.join(' ').replace(/<[^>]+>/g, '').trim();
+      if (txt) return txt;
+    }
+  } catch(e) {}
+  if (r && r.exception) return String(r.exception).replace(/^[\w.]+Error:\s*/, '');
+  return (r && r.exc) ? 'Server error' : 'API error';
+}
+
+/* Generic Frappe RPC. GET for reads; POST (with CSRF token) for anything that writes.
+   In desk, frappe.call already handles CSRF and shows server errors itself. */
+function rpc(fullMethod, args={}, post=false) {
   if (window.frappe && frappe.call) {
     return new Promise((res,rej) => frappe.call({
       method: fullMethod, args,
       callback: r => r.exc ? rej(new Error(r.exc)) : res(r.message),
-      error: rej,
+      error: r => rej(new Error((r && r.responseJSON && serverError(r.responseJSON)) || 'Request failed')),
     }));
   }
   // www / PWA context
   const params = new URLSearchParams();
   for (const [k,v] of Object.entries(args||{})) {
-    if (v !== null && v !== undefined && v !== '') params.set(k, String(v));
+    if (v !== null && v !== undefined && v !== '') params.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
   }
-  const url = '/api/method/' + fullMethod + (params.toString() ? '?'+params.toString() : '');
-  return fetch(url, { method:'GET', credentials:'same-origin', cache:'no-store', headers:{'Accept':'application/json','Cache-Control':'no-cache'} })
-    .then(r => r.json())
-    .then(r => { if (r.message !== undefined) return r.message; throw new Error(r.exc||'API error'); });
+  const headers = {'Accept':'application/json','Cache-Control':'no-cache'};
+  let url = '/api/method/' + fullMethod, init;
+  if (post) {
+    headers['X-Frappe-CSRF-Token'] = window.csrf_token || (window.frappe && frappe.csrf_token) || '';
+    headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    init = { method:'POST', credentials:'same-origin', cache:'no-store', headers, body: params.toString() };
+  } else {
+    if (params.toString()) url += '?' + params.toString();
+    init = { method:'GET', credentials:'same-origin', cache:'no-store', headers };
+  }
+  return fetch(url, init)
+    .then(resp => resp.json().catch(() => ({})).then(r => ({ ok: resp.ok, r })))
+    .then(({ok, r}) => {
+      // Frappe omits "message" entirely when a method returns None, so success is
+      // judged by HTTP status rather than by the presence of "message".
+      if (ok && !r.exc && !r.exception) return r.message;
+      throw new Error(serverError(r));
+    });
 }
 
 function callSetup(method, args={}) {
@@ -515,6 +547,45 @@ const CSS = `
   #wt-wm-modal{width:calc(100vw - 24px)}
   #wt-whform-modal{width:calc(100vw - 24px)}
 }
+
+.wt-tt-extra{font-size:9px;color:var(--wt-text2);margin-top:5px;line-height:1.4}
+.wt-tt-extra+.wt-tt-extra{margin-top:1px}
+
+/* Company switcher */
+.wt-sb-company{padding:8px 10px 4px}
+.wt-sb-company select{width:100%;height:26px;border-radius:6px;border:1px solid var(--wt-border);background:var(--wt-card);color:var(--wt-text);font-size:10px;padding:0 4px;outline:none}
+.wt-sb-company select:focus{border-color:var(--wt-accent)}
+#wt-app.dark .wt-sb-company select option{background:#13151e}
+.wt-sb-empty{padding:12px 10px;font-size:10px;color:var(--wt-text3);line-height:1.5}
+
+/* Feature toolbar */
+#wt-tools{position:absolute;top:46px;left:158px;right:12px;z-index:11;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;pointer-events:none;padding-bottom:2px}
+#wt-tools::-webkit-scrollbar{display:none}
+.wt-tool{pointer-events:all;position:relative;flex-shrink:0;height:28px;padding:0 10px;border-radius:7px;border:1px solid var(--wt-border);background:var(--wt-sb);color:var(--wt-text2);font-size:10px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;line-height:1;backdrop-filter:blur(6px);transition:all .15s}
+.wt-tool:hover{color:var(--wt-text);border-color:var(--wt-accent)}
+.wt-tool:focus-visible{outline:2px solid var(--wt-accent);outline-offset:1px}
+.wt-tool.act{background:var(--wt-accent);border-color:var(--wt-accent);color:#fff}
+.wt-tool-ico{font-size:12px}
+.wt-tool-badge{min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#ef4444;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center}
+#wt-app.has-tools #wt-view2d{top:80px}
+@media(max-width:600px){
+  #wt-tools{top:calc(var(--wt-top-h, 80px) + 4px);left:8px;right:8px}
+  .wt-tool-lbl{display:none}
+  .wt-tool{padding:0 9px}
+  #wt-app.has-tools #wt-view2d{top:calc(var(--wt-top-h, 80px) + 38px)!important}
+}
+
+/* Per-item actions in the stock table */
+#wt-im-tbl td.wt-im-act{text-align:right;white-space:nowrap}
+.wt-im-act-btn{height:24px;padding:0 8px;margin-left:4px;border-radius:6px;border:1px solid #cbd5e0;background:#fff;color:#2d3748;font-size:11px;font-weight:600;cursor:pointer}
+.wt-im-act-btn:hover{border-color:#3b82f6;color:#2b6cb0;background:#ebf8ff}
+
+/* Toasts (standalone page) */
+#wt-toasts{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+.wt-toast{padding:8px 14px;border-radius:8px;font-size:11px;font-weight:600;background:#132b1d;color:#4ade80;border:1px solid rgba(74,222,128,.35);box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:min(420px,90vw)}
+.wt-toast-red{background:#2b1313;color:#f87171;border-color:rgba(248,113,113,.4)}
+.wt-toast-orange{background:#2b2013;color:#fbbf24;border-color:rgba(251,191,36,.4)}
+.wt-toast-blue{background:#13203b;color:#93c5fd;border-color:rgba(96,165,250,.4)}
 `;
 
 /* ─────────────────────────────────────────────────────────────
@@ -586,7 +657,57 @@ const store = reactive({
   whUomOptions: [],
   whDeleteTarget: null,
   whDeleting: false,
+  // Company switcher (shown when the site has more than one company)
+  companies: [],
+  company: '',
+  // Set by the timeline feature while store.slots holds a historical snapshot
+  replayDate: null,
 });
+
+/* ─────────────────────────────────────────────────────────────
+   EXTENSION POINTS
+   Feature modules in public/js/features/*.js register themselves through
+   WarehouseTheatre3D.register(core => {...}) before the app mounts, and plug in via:
+     ext.overlays       components rendered on top of the app (dialogs, panels)
+     ext.tools          toolbar buttons {id, icon, label, onClick, active(), show(), badge()}
+     ext.panelSections  components rendered in the detail panel, receive prop `d`
+     ext.itemActions    per-item buttons in the stock table {icon, label, show(it,d), run(it,d)}
+     hooks.lvColor      (lv, slot) => {hex, css} | null   recolours levels in 3D and 2D
+     hooks.slotColor    (slot) => {hex, css} | null        recolours whole 2D tiles
+     hooks.legend       () => [{color, label}] | null       replaces the fill legend
+     hooks.tooltipLines (lv, slot) => [string]              extra lines in the hover tooltip
+     bus               events: scene-built, group-selected, escape; intercepts: level-click
+   store.replayDate is set while the timeline shows historical data in place of live
+   stock; features that write stock check it and stay disabled.
+───────────────────────────────────────────────────────────── */
+const ext = reactive({ overlays: [], tools: [], panelSections: [], itemActions: [] });
+const hooks = reactive({ lvColor: null, slotColor: null, legend: null, tooltipLines: null });
+const bus = {
+  _h: {},
+  on(evt, fn) { (this._h[evt] = this._h[evt] || []).push(fn); },
+  emit(evt, ...args) {
+    (this._h[evt] || []).forEach(fn => { try { fn(...args); } catch(e) { console.error('WT3D ext:', evt, e); } });
+  },
+  /* First handler returning true consumes the event (e.g. "pick a target bin" mode). */
+  intercept(evt, ...args) {
+    for (const fn of (this._h[evt] || [])) {
+      try { if (fn(...args)) return true; } catch(e) { console.error('WT3D ext:', evt, e); }
+    }
+    return false;
+  },
+};
+
+/* Colour for one level: a feature's heatmap colour when active, otherwise fill %. */
+function levelColorHex(lv, sl) {
+  const h = hooks.lvColor ? hooks.lvColor(lv, sl) : null;
+  if (h) return h.hex;
+  return (lv.uoms||[]).some(u=>u.qty>0) ? FC(lvFill(lv)) : null;
+}
+function levelColorCss(lv, sl) {
+  const h = hooks.lvColor ? hooks.lvColor(lv, sl) : null;
+  if (h) return h.css;
+  return (lv.uoms||[]).some(u=>u.qty>0) ? FCH(lvFill(lv)) : null;
+}
 
 /* ─────────────────────────────────────────────────────────────
    COMPUTED HELPERS
@@ -625,6 +746,46 @@ class ThreeEngine {
     this.hovKey=null;
     this._animRunning=false;
     this.aisleMode=false;
+    this.tickers=[];      // per-frame callbacks from features: fn(timeSeconds)
+    this.slotPos={};      // slot wh -> {x, z, row, col, levels, levelY: [...]}
+    this.layout=null;     // grid constants of the last built scene (used by route planning)
+  }
+
+  /* Free GPU memory held by a group's meshes before they are discarded. */
+  _disposeGroup(grp) {
+    const seen=new Set();
+    grp.traverse(o=>{
+      if (o.geometry && !seen.has(o.geometry)) { seen.add(o.geometry); o.geometry.dispose(); }
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      mats.forEach(m=>{ if (seen.has(m)) return; seen.add(m); if (m.map) m.map.dispose(); m.dispose(); });
+    });
+    while (grp.children.length) grp.remove(grp.children[0]);
+  }
+
+  clearOverlay(name) {
+    if (!this.overlayGrp) return;
+    const g = this.overlayGrp.getObjectByName(name);
+    if (g) { this._disposeGroup(g); this.overlayGrp.remove(g); }
+  }
+
+  /* Named sub-group of the overlay layer, emptied first, for a feature to draw into. */
+  overlay(name) {
+    this.clearOverlay(name);
+    const g = new window.THREE.Group(); g.name = name;
+    this.overlayGrp.add(g);
+    return g;
+  }
+
+  flyTo(x, z, radius) {
+    if (this.aisleMode) return;
+    this.tPX = x; this.tPZ = z;
+    if (radius) this.tR = Math.max(5, Math.min(60, radius));
+  }
+
+  /* PNG data URL of the current 3D view (rendered synchronously so the buffer is valid). */
+  screenshot() {
+    this.renderer.render(this.scene, this.camera);
+    return this.canvas.toDataURL('image/png');
   }
 
   init(canvas, cwEl) {
@@ -663,6 +824,8 @@ class ThreeEngine {
     this.scene.add(new THREE.GridHelper(80,40,gc,gc));
     this.rootGrp = new THREE.Group();
     this.scene.add(this.rootGrp);
+    this.overlayGrp = new THREE.Group();   // feature drawings: beacons, routes, heat tiles
+    this.scene.add(this.overlayGrp);
     this._sizeRenderer();
     this._startAnimate();
     new ResizeObserver(()=>this._sizeRenderer()).observe(cwEl);
@@ -691,6 +854,7 @@ class ThreeEngine {
       this._updateCamera();
       this.ptL.position.x=Math.sin(t*.35)*7;
       this.ptL.position.z=Math.cos(t*.35)*7;
+      for (const fn of this.tickers) { try { fn(t); } catch(e) { console.error('WT3D ticker', e); } }
       this.renderer.render(this.scene,this.camera);
     };
     loop();
@@ -740,8 +904,9 @@ class ThreeEngine {
 
   buildScene(slots) {
     const THREE=window.THREE;
-    while (this.rootGrp.children.length) this.rootGrp.remove(this.rootGrp.children[0]);
+    this._disposeGroup(this.rootGrp);
     this.meshMap={};
+    this.slotPos={};
     store.selKey=null;
     const SW=2.2, SD=2.2, GAP=.6, LVH=1.0, BASE=.1;
     const cols=Math.max(...slots.map(s=>s.col),0)+1;
@@ -764,10 +929,13 @@ class ThreeEngine {
     this.scene.background.setHex(bgCol);
     this.scene.fog.color.setHex(bgCol);
     this.renderer.setClearColor(bgCol,1);
+    this.layout={SW,SD,GAP,LVH,BASE,ox,oz,cols,maxRow,rowZOffset,totalDepth,width:cols*(SW+GAP)-GAP};
     slots.forEach(sl=>{
       const nL=sl.levels.length;
       const cx=ox+sl.col*(SW+GAP)+SW/2;
       const cz=oz+(rowZOffset[sl.row]||0)+SD/2;
+      this.slotPos[sl.wh]={x:cx,z:cz,row:sl.row,col:sl.col,levels:nL,
+        levelY:sl.levels.map((_,li)=>BASE+li*LVH+LVH/2),top:BASE+nL*LVH};
       const base=new THREE.Mesh(new THREE.BoxGeometry(SW,BASE,SD),baseMat);
       base.position.set(cx,BASE/2,cz); base.castShadow=true; base.receiveShadow=true;
       this.rootGrp.add(base);
@@ -778,13 +946,17 @@ class ThreeEngine {
       });
       sl.levels.forEach((lv,li)=>{
         const lp=lvFill(lv), hs=(lv.uoms||[]).some(u=>u.qty>0);
-        const col=hs?FC(lp):(store.isDark?0x101827:0xe8edf5);
+        const hc=levelColorHex(lv,sl);
+        const col=hc!==null?hc:(store.isDark?0x101827:0xe8edf5);
+        // An empty level can still carry a heatmap colour (e.g. a bin that was
+        // emptied by recent picks), so tint the shell whenever a colour exists.
+        const tinted=hc!==null;
         const y0=BASE+li*LVH;
         const shelf=new THREE.Mesh(new THREE.BoxGeometry(SW,.024,SD),shelfMat);
         shelf.position.set(cx,y0+.012,cz); this.rootGrp.add(shelf);
         const shell=new THREE.Mesh(
           new THREE.BoxGeometry(SW-.08,LVH-.03,SD-.08),
-          new THREE.MeshStandardMaterial({color:hs?col:(store.isDark?0x0f1520:0xdde3ef),transparent:true,opacity:hs?.13:.06,side:THREE.BackSide,roughness:.3,depthWrite:false})
+          new THREE.MeshStandardMaterial({color:tinted?col:(store.isDark?0x0f1520:0xdde3ef),transparent:true,opacity:hs?.13:tinted?.1:.06,side:THREE.BackSide,roughness:.3,depthWrite:false})
         );
         shell.position.set(cx,y0+LVH/2,cz); this.rootGrp.add(shell);
         let fillM=null;
@@ -807,22 +979,28 @@ class ThreeEngine {
         this.meshMap[lvKey(sl,lv)]={fillM,shellM:shell,proxy,lv,slot:sl,li,col};
       });
     });
+    bus.emit('scene-built', slots);
   }
+
+  /* Recolour existing meshes (heatmap mode change) without rebuilding geometry. */
+  recolor() { this.highlight(store.selKey); }
 
   highlight(key) {
     store.selKey=key;
     const selLv=key?this.meshMap[key]?.lv:null;
     Object.entries(this.meshMap).forEach(([k,d])=>{
       const isSel=k===key, same=selLv&&d.lv.label===selLv.label;
-      const lp=lvFill(d.lv), hs=(d.lv.uoms||[]).some(u=>u.qty>0);
-      const col=hs?FC(lp):(store.isDark?0x101827:0xe8edf5);
+      const hs=(d.lv.uoms||[]).some(u=>u.qty>0);
+      const hc=levelColorHex(d.lv,d.slot);
+      const tinted=hc!==null;
+      const col=tinted?hc:(store.isDark?0x101827:0xe8edf5);
       if (d.fillM){
         d.fillM.material.color.setHex(isSel?0xffffff:same?0xd0d8ff:col);
         d.fillM.material.emissive.setHex(isSel?0x3b82f6:same?0x1e3a8a:col);
         d.fillM.material.emissiveIntensity=isSel?.6:same?.28:.2;
       }
-      d.shellM.material.color.setHex(isSel?0x3b82f6:same?0x1e40af:hs?col:0x0f1520);
-      d.shellM.material.opacity=isSel?.4:same?.22:hs?.13:.06;
+      d.shellM.material.color.setHex(isSel?0x3b82f6:same?0x1e40af:tinted?col:0x0f1520);
+      d.shellM.material.opacity=isSel?.4:same?.22:hs?.13:tinted?.1:.06;
     });
   }
 
@@ -1118,14 +1296,41 @@ const actions = {
         store.canEdit = false;
         store.canView = false;
       }
-      const groups = await call('get_warehouse_groups');
+      if (!store.companies.length) {
+        try { store.companies = (await call('get_companies')) || []; } catch(e){ store.companies = []; }
+        if (store.companies.length > 1 && !store.company) {
+          let saved = '';
+          try { saved = localStorage.getItem('wt3d-company') || ''; } catch(e) {}
+          store.company = store.companies.some(c=>c.name===saved) ? saved : '';
+        }
+      }
+      const groups = await call('get_warehouse_groups', store.company ? {company: store.company} : {});
       store.groups = groups||[];
-      if (store.groups.length) await actions.selectGroup(store.groups[0]);
+      // Keep the current floor after a refresh when it still exists, instead of
+      // jumping back to the first floor in the list.
+      const keep = store.curGrp && store.groups.find(g=>g.id===store.curGrp.id);
+      if (keep) await actions.selectGroup(keep);
+      else if (store.groups.length) await actions.selectGroup(store.groups[0]);
+      else { store.curGrp=null; store.slots=[]; if (store.threeReady) engine.buildScene([]); }
     } catch(e){ console.error('WT: groups', e); }
     finally { store.loading=false; }
   },
 
+  async setCompany(company) {
+    store.company = company || '';
+    try { localStorage.setItem('wt3d-company', store.company); } catch(e) {}
+    store.curGrp = null;
+    await actions.loadGroups();
+  },
+
+  /* Reload the current floor's stock (after a transfer, count, etc.). */
+  async refreshFloor() {
+    if (store.curGrp) await actions.selectGroup(store.curGrp);
+  },
+
   async selectGroup(g) {
+    const changed = !store.curGrp || store.curGrp.id !== g.id;
+    bus.emit('before-group-change', g, changed);
     store.curGrp=g;
     store.dpOpen=false;
     store.imOpen=false;
@@ -1136,10 +1341,11 @@ const actions = {
       store.slots=slots||[];
       if (store.curView==='3d') {
         engine.buildScene(filteredSlots());
-        engine.springIn();
+        if (changed) engine.springIn();
       } else {
         // 2D will re-render reactively
       }
+      bus.emit('group-selected', g, changed);
     } catch(e){ console.error('WT: slots', e); }
     finally { store.loading=false; }
   },
@@ -1171,6 +1377,7 @@ const actions = {
     if (!sl) return;
     const defaultLv=sl.levels.find(l=>(l.uoms||[]).some(u=>u.qty>0))||sl.levels[0];
     if (!defaultLv) return;
+    if (bus.intercept('level-click', {slot:sl,lv:defaultLv})) return;
     actions.openDP({slot:sl,lv:defaultLv});
     actions.openItemModal({slot:sl,lv:defaultLv},true);
   },
@@ -1180,6 +1387,7 @@ const actions = {
     if (!sl) return;
     const lv=sl.levels.find(l=>l.wh===lvWh);
     if (!lv) return;
+    if (bus.intercept('level-click', {slot:sl,lv})) return;
     actions.openDP({slot:sl,lv});
     actions.openItemModal({slot:sl,lv},true);
   },
@@ -1629,6 +1837,13 @@ const Sidebar = defineComponent({
       <div id="wt-sb-overlay" :class="store.sidebarOpen?'show':''" @click="actions.toggleSidebar()"></div>
       <div id="wt-sb" :class="store.sidebarOpen?'mobile-open':''">
         <div class="wt-sb-brand">Warehouse Theatre 3D</div>
+        <div v-if="store.companies.length>1" class="wt-sb-company">
+          <select :value="store.company" @change="actions.setCompany($event.target.value)" aria-label="Company">
+            <option value="">All companies</option>
+            <option v-for="c in store.companies" :key="c.name" :value="c.name">{{c.name}}</option>
+          </select>
+        </div>
+        <div v-if="!store.groups.length && !store.loading" class="wt-sb-empty">No floors mapped{{store.company?' for this company':''}}.</div>
         <div id="wt-sb-list">
           <template v-for="(gs, parent) in byParent" :key="parent">
             <span class="wt-sb-label">{{parent}}</span>
@@ -1708,15 +1923,74 @@ const TopBar = defineComponent({
 });
 
 /* ─────────────────────────────────────────────────────────────
+   COMPONENT: ToolBar  (buttons registered by feature modules)
+───────────────────────────────────────────────────────────── */
+const ToolBar = defineComponent({
+  name: 'ToolBar',
+  setup(){
+    const tools = computed(()=>ext.tools.filter(t=>!t.show || t.show()));
+    // On phones the top bar wraps to 2-3 lines depending on width, so publish its real
+    // height as --wt-top-h for the toolbar and 2D grid to sit below it.
+    let ro = null;
+    onMounted(()=>{
+      const top = document.getElementById('wt-top'), app = document.getElementById('wt-app');
+      if (!top || !app || !window.ResizeObserver) return;
+      ro = new ResizeObserver(()=>app.style.setProperty('--wt-top-h', top.offsetHeight + 'px'));
+      ro.observe(top);
+    });
+    onUnmounted(()=>{ if (ro) ro.disconnect(); });
+    return { store, tools };
+  },
+  template: `
+    <div id="wt-tools" v-if="tools.length && !store.aisleMode" role="toolbar" aria-label="Warehouse tools">
+      <button v-for="t in tools" :key="t.id" :id="'wt-tool-'+t.id"
+        :class="['wt-tool', t.active && t.active() ? 'act' : '']"
+        :title="t.title || t.label" @click="t.onClick()">
+        <span class="wt-tool-ico">{{t.icon}}</span><span class="wt-tool-lbl">{{t.label}}</span>
+        <span v-if="t.badge && t.badge()" class="wt-tool-badge">{{t.badge()}}</span>
+      </button>
+    </div>
+  `,
+});
+
+/* ─────────────────────────────────────────────────────────────
+   COMPONENT: Toasts  (standalone page only; desk uses frappe.show_alert)
+───────────────────────────────────────────────────────────── */
+const Toasts = defineComponent({
+  name: 'Toasts',
+  setup(){
+    const items = ref([]);
+    let seq = 0;
+    bus.on('toast', (message, indicator)=>{
+      const id = ++seq;
+      items.value.push({id, message, indicator: indicator || 'green'});
+      setTimeout(()=>{ items.value = items.value.filter(t=>t.id!==id); }, 4500);
+    });
+    return { items };
+  },
+  template: `
+    <div id="wt-toasts" aria-live="polite">
+      <div v-for="t in items" :key="t.id" :class="['wt-toast', 'wt-toast-'+t.indicator]">{{t.message}}</div>
+    </div>
+  `,
+});
+
+/* ─────────────────────────────────────────────────────────────
    COMPONENT: BottomBar (3D only)
 ───────────────────────────────────────────────────────────── */
 const BottomBar = defineComponent({
   name: 'BottomBar',
-  setup(){ return {store}; },
+  setup(){
+    const legend = computed(()=>hooks.legend ? hooks.legend() : null);
+    return {store, legend};
+  },
   template: `
     <div id="wt-bot" v-if="store.curView==='3d'">
       <div id="wt-hint">Left drag · orbit &nbsp;|&nbsp; Right drag · pan &nbsp;|&nbsp; Scroll · zoom<br>Click · highlight &amp; side panel &nbsp;|&nbsp; Double click · full stock details</div>
-      <div id="wt-legend">
+      <div id="wt-legend" v-if="legend">
+        <span v-for="(l,i) in legend" :key="i" class="wt-li"><span class="wt-lb" :style="{background:l.color}"></span>{{l.label}}</span>
+      </div>
+      <div id="wt-legend" v-else>
         <span class="wt-li"><span class="wt-lb" style="background:#4ade80"></span>Low</span>
         <span class="wt-li"><span class="wt-lb" style="background:#facc15"></span>Mid</span>
         <span class="wt-li"><span class="wt-lb" style="background:#fb923c"></span>High</span>
@@ -1739,6 +2013,7 @@ const Tooltip = defineComponent({
     uoms(){ return this.store.ttData?.lv?.uoms||[]; },
     lp(){ return this.store.ttData?lvFill(this.store.ttData.lv):0; },
     clr(){ const hs=(this.uoms).some(u=>u.qty>0); return hs?FCH(this.lp):'rgba(255,255,255,.2)'; },
+    extra(){ const d=this.store.ttData; return (d && hooks.tooltipLines) ? (hooks.tooltipLines(d.lv, d.slot)||[]) : []; },
   },
   template: `
     <div id="wt-tt" v-if="store.ttVisible"
@@ -1755,6 +2030,7 @@ const Tooltip = defineComponent({
       </div>
       <div v-else style="font-size:9px;color:var(--wt-text3);margin-top:2px">Empty level</div>
       <div class="wt-tt-bar"><div class="wt-tt-fill" :style="{width:lp+'%',background:clr}"></div></div>
+      <div v-for="(line,i) in extra" :key="'x'+i" class="wt-tt-extra">{{line}}</div>
     </div>
   `,
 });
@@ -1765,7 +2041,7 @@ const Tooltip = defineComponent({
 const DetailPanel = defineComponent({
   name: 'DetailPanel',
   setup(){
-    return { store, UCH, fmt, FCH, fmtK, lvFill, lvKey, actions };
+    return { store, UCH, fmt, FCH, fmtK, lvFill, lvKey, actions, ext };
   },
   computed:{
     d(){ return this.store.dpData; },
@@ -1820,6 +2096,8 @@ const DetailPanel = defineComponent({
           </div>
         </div>
 
+        <component v-for="c in ext.panelSections" :is="c" :key="c.name" :d="d"/>
+
         <button v-if="store.canEdit" class="wt-cfg-btn" @click="actions.openCfg(d.slot.wh)">⚙ Configure stack levels</button>
       </template>
     </div>
@@ -1832,7 +2110,8 @@ const DetailPanel = defineComponent({
 const ItemModal = defineComponent({
   name: 'ItemModal',
   setup(){
-    return { store, fmt, fmtK, actions, lvFill };
+    function rowActions(it, d){ return ext.itemActions.filter(a=>!a.show || a.show(it, d)); }
+    return { store, fmt, fmtK, actions, lvFill, ext, rowActions };
   },
   computed:{
     d(){ return this.store.imData; },
@@ -1880,10 +2159,11 @@ const ItemModal = defineComponent({
                 <th>Item Code</th><th>Item Name</th><th>Group</th><th>UOM</th>
                 <th>Actual</th><th>Reserved</th><th>Available</th>
                 <th>Rate ₹</th><th>Value ₹</th>
+                <th v-if="ext.itemActions.length" class="wt-im-act-h"></th>
               </tr></thead>
               <tbody>
                 <tr v-if="!items.length">
-                  <td colspan="10" class="wt-im-empty">No items with stock in this level</td>
+                  <td :colspan="ext.itemActions.length?11:10" class="wt-im-empty">No items with stock in this level</td>
                 </tr>
                 <tr v-for="(it,i) in items" :key="it.c">
                   <td class="wt-im-idx">{{i+1}}</td>
@@ -1896,6 +2176,10 @@ const ItemModal = defineComponent({
                   <td :class="((parseFloat(it.a)||0)-(parseFloat(it.r)||0)>0)?'wt-im-avl':'wt-im-dim'">{{fmt((parseFloat(it.a)||0)-(parseFloat(it.r)||0))}}</td>
                   <td style="color:#718096">{{(parseFloat(it.rate)||0)>0?fmt(it.rate):'—'}}</td>
                   <td class="wt-im-val">{{(parseFloat(it.stock_value)||0)>0?Math.round(parseFloat(it.stock_value)).toLocaleString('en-IN'):'—'}}</td>
+                  <td v-if="ext.itemActions.length" class="wt-im-act">
+                    <button v-for="a in rowActions(it, d)" :key="a.label" class="wt-im-act-btn"
+                      :title="a.label" @click="a.run(it, d)">{{a.icon}} {{a.label}}</button>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -2283,14 +2567,26 @@ const View2D = defineComponent({
     });
 
     function tileCls(sl){
+      if (hooks.slotColor) return hooks.slotColor(sl) ? '' : 'empty';
       const fp=slotFill(sl), hs=hasStock(sl);
       return !hs?'empty':fp>=90?'full':fp>=70?'high':fp>=40?'mid':'low';
     }
+    /* Inline colours when a heatmap mode is active (the classes above cover fill %). */
+    function tileStyle(sl, ti){
+      const st={'animation-delay':ti*30+'ms'};
+      const c=hooks.slotColor?hooks.slotColor(sl):null;
+      if (c){ st.borderColor=c.css; st.background=c.css.replace(/^#([0-9a-f]{6})$/i,(m,h)=>'rgba('+parseInt(h.slice(0,2),16)+','+parseInt(h.slice(2,4),16)+','+parseInt(h.slice(4,6),16)+',.14)'); }
+      return st;
+    }
+    function tileBar(sl){
+      if (hooks.slotColor){ const c=hooks.slotColor(sl); return c?c.css:'transparent'; }
+      return hasStock(sl)?FCH(slotFill(sl)):'transparent';
+    }
     function tileQty(sl){ return sl.levels.reduce((s,l)=>(l.uoms||[]).reduce((ss,u)=>ss+(u.qty||0),s),0); }
-    function lvColor(lv){ const q=(lv.uoms||[]).reduce((s,u)=>s+(u.qty||0),0); return q>0?FCH(lvFill(lv)):'var(--wt-border)'; }
+    function lvColor(lv, sl){ return levelColorCss(lv, sl) || 'var(--wt-border)'; }
     function lvQty(lv){ return (lv.uoms||[]).reduce((s,u)=>s+(u.qty||0),0); }
 
-    return { store, sections, tileCls, tileQty, lvColor, lvQty, actions, fmtK, fmt, FCH, slotFill, hasStock };
+    return { store, sections, tileCls, tileStyle, tileBar, tileQty, lvColor, lvQty, actions, fmtK, fmt, FCH, slotFill, hasStock };
   },
   template: `
     <div id="wt-view2d" :style="{display:store.curView==='2d'?'block':'none'}">
@@ -2307,7 +2603,8 @@ const View2D = defineComponent({
             <div class="wt-2d-slots" :style="{'grid-template-columns':'repeat('+sec.cols+',1fr)'}">
               <div v-for="(sl,ti) in sec.tiles" :key="sl.wh"
                 :class="['wt-2d-tile', tileCls(sl)]"
-                :style="{'animation-delay':ti*30+'ms'}"
+                :data-slot="sl.wh"
+                :style="tileStyle(sl, ti)"
                 :title="sl.wh+(tileQty(sl)>0?'\\nQty: '+fmt(tileQty(sl)):'\\nEmpty')"
                 @click="actions.open2DModal(sl.wh)">
                 <div class="wt-2d-tile-name">{{sl.shortName}}</div>
@@ -2316,14 +2613,14 @@ const View2D = defineComponent({
                   <div v-for="lv in [...sl.levels].reverse()" :key="lv.wh"
                     class="wt-2d-lv-row"
                     @click.stop="actions.open2DModalLevel(sl.wh, lv.wh)">
-                    <div class="wt-2d-lv-dot" :style="{background:lvColor(lv)}"></div>
+                    <div class="wt-2d-lv-dot" :style="{background:lvColor(lv, sl)}"></div>
                     <div class="wt-2d-lv-name">{{lv.label.split('/').pop()}}</div>
-                    <div class="wt-2d-lv-qty" :style="{color:lvQty(lv)>0?lvColor(lv):'var(--wt-text3)'}">
+                    <div class="wt-2d-lv-qty" :style="{color:lvQty(lv)>0?lvColor(lv, sl):'var(--wt-text3)'}">
                       {{lvQty(lv)>0?fmtK(lvQty(lv)):'—'}}
                     </div>
                   </div>
                 </div>
-                <div class="wt-2d-tile-bar" :style="{background:hasStock(sl)?FCH(slotFill(sl)):'transparent'}"></div>
+                <div class="wt-2d-tile-bar" :style="{background:tileBar(sl)}"></div>
               </div>
             </div>
           </div>
@@ -2359,6 +2656,7 @@ const View3D = defineComponent({
         },
         // click — single: highlight + side panel only | double: open full item modal
         (d, wasSel, isDouble)=>{
+          if (bus.intercept('level-click', d, isDouble)) return;
           if (isDouble) {
             // Double click → open full item modal
             engine.highlight(lvKey(d.slot,d.lv));
@@ -2580,12 +2878,13 @@ const SetupWizard = defineComponent({
 ───────────────────────────────────────────────────────────── */
 const App = defineComponent({
   name: 'WarehouseTheatreVue',
-  components: { Sidebar, TopBar, BottomBar, Tooltip, DetailPanel, ItemModal, ConfigModal, FloorPlanModal, WarehouseManageModal, WarehouseFormModal, WarehouseDeleteConfirm, View3D, View2D, Loading, AislePicker, SetupWizard },
+  components: { Sidebar, TopBar, ToolBar, Toasts, BottomBar, Tooltip, DetailPanel, ItemModal, ConfigModal, FloorPlanModal, WarehouseManageModal, WarehouseFormModal, WarehouseDeleteConfirm, View3D, View2D, Loading, AislePicker, SetupWizard },
   setup(){
     onMounted(async ()=>{
       // Keyboard shortcuts
       document.addEventListener('keydown', e=>{
         if (e.key==='Escape'){
+          bus.emit('escape');
           actions.closeDP();
           actions.closeCfg();
           actions.closeItemModal();
@@ -2602,10 +2901,10 @@ const App = defineComponent({
         await actions.loadGroups();
       }
     });
-    return { store };
+    return { store, ext };
   },
   template: `
-    <div id="wt-app" :class="store.isDark?'dark':'light'">
+    <div id="wt-app" :class="[store.isDark?'dark':'light', ext.tools.length?'has-tools':'']">
       <template v-if="store.setupChecking">
         <div class="wt-loading" style="position:relative;height:100%">
           <div class="wt-spinner"></div>
@@ -2620,10 +2919,12 @@ const App = defineComponent({
         <View3D/>
         <View2D/>
         <TopBar/>
+        <ToolBar/>
         <BottomBar/>
         <Tooltip/>
         <DetailPanel/>
         <ItemModal/>
+        <component v-for="c in ext.overlays" :is="c" :key="c.name"/>
         <ConfigModal/>
         <FloorPlanModal/>
         <WarehouseManageModal/>
@@ -2631,6 +2932,7 @@ const App = defineComponent({
         <WarehouseDeleteConfirm/>
         <AislePicker/>
         <Loading/>
+        <Toasts/>
       </template>
     </div>
   `,
@@ -2639,15 +2941,39 @@ const App = defineComponent({
 /* ─────────────────────────────────────────────────────────────
    PUBLIC API  (same interface as wt-app.js)
 ───────────────────────────────────────────────────────────── */
+function addCSS(id, css) {
+  if (document.getElementById(id)) return;
+  const style = document.createElement('style');
+  style.id = id;
+  style.textContent = css;
+  document.head.appendChild(style);
+}
+
+/* What feature modules receive. Kept small and explicit so features don't reach into
+   each other: anything shared goes through store, hooks, ext or bus. */
+const core = {
+  Vue, store, ext, hooks, bus, engine, actions, addCSS,
+  call,                                            // api.api.<method>, GET semantics
+  rpc,                                             // any whitelisted method path
+  api(module, method, args, post) {                // warehouse_theatre_3d...api.<module>.<method>
+    return rpc('warehouse_theatre_3d.warehouse_theatre_3d.api.' + module + '.' + method, args || {}, !!post);
+  },
+  alert(message, indicator) {
+    if (window.frappe && frappe.show_alert) frappe.show_alert({message, indicator: indicator || 'green'}, 4);
+    else bus.emit('toast', message, indicator);
+  },
+  helpers: { FC, FCH, UCH, fmt, fmtK, lvFill, slotFill, hasStock, lvKey, filteredSlots, levelColorCss },
+};
+
 window.WarehouseTheatre3D = {
+  core,
+  /* Feature modules call this before init(); fn(core) runs immediately. */
+  register(fn) {
+    try { fn(core); } catch(e) { console.error('WT3D: feature failed to load', e); }
+  },
   init(mountId) {
     // Inject CSS once
-    if (!document.getElementById('wt-style')) {
-      const style = document.createElement('style');
-      style.id = 'wt-style';
-      style.textContent = CSS;
-      document.head.appendChild(style);
-    }
+    addCSS('wt-style', CSS);
     // Mount Vue app
     setTimeout(()=>{
       const app = createApp(App);

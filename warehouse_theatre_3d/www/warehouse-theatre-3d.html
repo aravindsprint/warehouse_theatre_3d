@@ -21,6 +21,9 @@
 </head>
 <body>
   <div id="wt3d-root"></div>
+{%- endraw %}
+  <script>window.csrf_token = "{{ csrf_token }}";</script>
+{%- raw %}
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/assets/warehouse_theatre_3d/sw.js', {scope:'/'})
@@ -29,7 +32,18 @@
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-  <script src="/assets/warehouse_theatre_3d/js/wt3d-vue.js?v=5"></script>
+  <script src="/assets/warehouse_theatre_3d/js/wt3d-vue.js?v=6"></script>
+  <!-- Feature modules: each registers itself with WarehouseTheatre3D before init(). ui.js first. -->
+  <script src="/assets/warehouse_theatre_3d/js/features/ui.js?v=6"></script>
+  <script src="/assets/warehouse_theatre_3d/js/features/heatmap.js?v=6"></script>
+  <script src="/assets/warehouse_theatre_3d/js/features/locate.js?v=6"></script>
+  <script src="/assets/warehouse_theatre_3d/js/features/stock-actions.js?v=6"></script>
+  <script src="/assets/warehouse_theatre_3d/js/features/putaway.js?v=6"></script>
+  <script src="/assets/warehouse_theatre_3d/js/features/routing.js?v=6"></script>
+  <script src="/assets/warehouse_theatre_3d/js/features/routes.js?v=6"></script>
+  <script src="/assets/warehouse_theatre_3d/js/features/timeline.js?v=6"></script>
+  <script src="/assets/warehouse_theatre_3d/js/features/export.js?v=6"></script>
+  <script src="/assets/warehouse_theatre_3d/js/features/alerts.js?v=6"></script>
   <script>
     if (window.WarehouseTheatre3D) window.WarehouseTheatre3D.init('wt3d-root');
   </script>

@@ -6,7 +6,7 @@ app_publisher   = "Aravind G"
 app_description = "Free 3D & 2D warehouse storage visualization for any ERPNext warehouse hierarchy"
 app_email       = "aravindsprint@gmail.com"
 app_license     = "MIT"
-app_version     = "0.1.0"
+app_version     = "0.2.0"
 
 add_to_apps_screen = [
     {
@@ -23,3 +23,9 @@ website_route_rules = [
 ]
 
 fixtures = ["Custom Field"]
+
+scheduler_events = {
+    "daily": [
+        "warehouse_theatre_3d.alerts.send_capacity_alerts",
+    ],
+}

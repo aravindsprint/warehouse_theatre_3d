@@ -1,0 +1,76 @@
+{
+ "actions": [],
+ "creation": "2026-10-21 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "capacity_alerts_section",
+  "enable_capacity_alerts",
+  "bin_threshold",
+  "floor_threshold",
+  "alert_recipients"
+ ],
+ "fields": [
+  {
+   "fieldname": "capacity_alerts_section",
+   "fieldtype": "Section Break",
+   "label": "Capacity Alerts"
+  },
+  {
+   "default": "0",
+   "description": "Send a daily email listing bins and floors at or above the thresholds below. Only bins with a UOM capacity set are checked.",
+   "fieldname": "enable_capacity_alerts",
+   "fieldtype": "Check",
+   "label": "Enable Daily Capacity Alerts"
+  },
+  {
+   "default": "95",
+   "description": "A bin is flagged when its fill reaches this percentage. Also used for the warning badge inside the app.",
+   "fieldname": "bin_threshold",
+   "fieldtype": "Percent",
+   "label": "Bin Threshold"
+  },
+  {
+   "default": "85",
+   "description": "A floor is flagged when the average fill of its bins reaches this percentage.",
+   "fieldname": "floor_threshold",
+   "fieldtype": "Percent",
+   "label": "Floor Threshold"
+  },
+  {
+   "depends_on": "enable_capacity_alerts",
+   "description": "Email addresses, separated by commas or new lines.",
+   "fieldname": "alert_recipients",
+   "fieldtype": "Small Text",
+   "label": "Alert Recipients"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-21 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Warehouse Theatre 3D Module",
+ "name": "Warehouse Theatre Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Stock Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
