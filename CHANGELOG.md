@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.1 (2026-10-21)
+
+Fixes the Frappe Cloud Marketplace audit findings.
+
+- Saving from the floor plan editor, slot configuration, UOM capacities, warehouse management and the setup wizard now uses POST requests. Frappe commits these automatically, so the manual `frappe.db.commit()` calls are removed, and these methods no longer accept GET.
+- Deleting a warehouse that has transactions rolls back only the failed delete (savepoint) before disabling it.
+- SQL queries with an optional company filter no longer build the query text at runtime.
+
 ## v0.2.0 (2026-10-21)
 
 Warehouse Theatre 3D now goes beyond showing where stock is: it helps you move it, put it away, pick it faster and see how it changed.

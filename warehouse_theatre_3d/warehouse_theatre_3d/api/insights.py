@@ -319,9 +319,8 @@ def locate_item(item_code, company=None):
 	if not item:
 		frappe.throw(f"Item {item_code} not found")
 
-	company_cond = "AND w.company = %(company)s" if company else ""
 	rows = frappe.db.sql(
-		f"""
+		"""
 		SELECT b.warehouse AS wh, w.warehouse_name AS label, w.wt_warehouse_type AS wt_type,
 		       b.actual_qty AS qty, b.reserved_qty AS reserved, b.stock_value AS value,
 		       s.name AS slot, s.warehouse_name AS slot_label,
@@ -330,10 +329,11 @@ def locate_item(item_code, company=None):
 		INNER JOIN `tabWarehouse` w ON w.name = b.warehouse
 		LEFT JOIN `tabWarehouse` s ON s.name = w.parent_warehouse AND s.wt_warehouse_type = 'Slot'
 		LEFT JOIN `tabWarehouse` f ON f.name = s.parent_warehouse AND f.wt_warehouse_type = 'Floor'
-		WHERE b.item_code = %(item)s AND b.actual_qty != 0 {company_cond}
+		WHERE b.item_code = %(item)s AND b.actual_qty != 0
+		  AND (%(company)s IS NULL OR w.company = %(company)s)
 		ORDER BY b.actual_qty DESC
 		""",
-		{"item": item_code, "company": company},
+		{"item": item_code, "company": company or None},
 		as_dict=True,
 	)
 	for r in rows:
@@ -406,17 +406,17 @@ def get_timeline(group_warehouse, from_date=None, to_date=None):
 def compute_capacity_alerts(company=None, bin_threshold=95, floor_threshold=85):
 	"""Bins and Floors whose fill % is at or above the thresholds. Only bins with a UOM
 	capacity configured are considered, since fill % is meaningless without one."""
-	company_cond = "AND b.company = %(company)s" if company else ""
 	bins = frappe.db.sql(
-		f"""
+		"""
 		SELECT b.name AS wh, b.warehouse_name AS label, s.name AS slot, s.warehouse_name AS slot_label,
 		       f.name AS floor, f.warehouse_name AS floor_label
 		FROM `tabWarehouse` b
 		INNER JOIN `tabWarehouse` s ON s.name = b.parent_warehouse AND s.wt_warehouse_type = 'Slot' AND s.disabled = 0
 		INNER JOIN `tabWarehouse` f ON f.name = s.parent_warehouse AND f.wt_warehouse_type = 'Floor' AND f.disabled = 0
-		WHERE b.wt_warehouse_type = 'Bin' AND b.disabled = 0 {company_cond}
+		WHERE b.wt_warehouse_type = 'Bin' AND b.disabled = 0
+		  AND (%(company)s IS NULL OR b.company = %(company)s)
 		""",
-		{"company": company},
+		{"company": company or None},
 		as_dict=True,
 	)
 	whs = [b.wh for b in bins]

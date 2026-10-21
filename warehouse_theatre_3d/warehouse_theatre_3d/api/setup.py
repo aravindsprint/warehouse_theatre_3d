@@ -96,7 +96,7 @@ def scan_warehouse_tree(company=None):
 	}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def apply_depth_mapping(mapping, company=None):
 	"""
 	mapping: JSON list like [{"depth": 1, "role": "Building"}, {"depth": 2, "role": "Floor"}, ...]
@@ -149,7 +149,6 @@ def apply_depth_mapping(mapping, company=None):
 			frappe.db.set_value("Warehouse", w.name, "wt_warehouse_type", role, update_modified=False)
 			updated += 1
 
-	frappe.db.commit()  # GET requests from the www/PWA page roll back otherwise - see api.py
 	return {"ok": True, "updated": updated}
 
 
