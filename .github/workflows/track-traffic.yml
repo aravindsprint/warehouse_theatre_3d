@@ -12,10 +12,12 @@ jobs:
   record-traffic:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      # Data lives on its own branch so these daily commits don't land on main,
+      # where every commit shows up as a draft release on Frappe Cloud.
+      - name: Checkout traffic-data branch
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: traffic-data
 
       - name: Fetch and append clone/view traffic
         env:
@@ -46,7 +48,9 @@ jobs:
 
           for pair in "$CLONES_FILE" "$VIEWS_FILE"; do
             tail -n +2 "$pair" > "$pair.body" 2>/dev/null || touch "$pair.body"
-            cat "$pair.body" "$pair.tmp" | sort -t, -k1,1 -u > "$pair.merged"
+            # Fresh rows first + stable sort: a day fetched again (e.g. yesterday's
+            # partial count, now complete) keeps the newest value.
+            cat "$pair.tmp" "$pair.body" | sort -s -t, -k1,1 -u > "$pair.merged"
             { echo "date,count,uniques"; sort -t, -k1,1 "$pair.merged"; } > "$pair"
             rm -f "$pair.tmp" "$pair.body" "$pair.merged"
           done
@@ -57,4 +61,4 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add traffic-data/
           git diff --cached --quiet || git commit -m "chore: update traffic history $(date -u +%Y-%m-%d)"
-          git push
+          git push origin HEAD:traffic-data
