@@ -20,17 +20,33 @@ frappe.pages['warehouse-theatre-3d'].on_page_load = function (wrapper) {
 	mount.style.cssText = 'width:100%;height:calc(100vh - 57px);';
 	$(wrapper).find('.layout-main-section')[0].appendChild(mount);
 
-	function loadScript(src, cb) {
-		const s = document.createElement('script');
-		s.src = src; s.onload = cb;
-		document.head.appendChild(s);
+	function loadScript(src) {
+		return new Promise(function (resolve, reject) {
+			const s = document.createElement('script');
+			s.src = src; s.onload = resolve;
+			s.onerror = function () { reject(new Error('Failed to load ' + src)); };
+			document.head.appendChild(s);
+		});
 	}
 
-	loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js', function () {
-		loadScript('https://unpkg.com/vue@3/dist/vue.global.prod.js', function () {
-			loadScript('/assets/warehouse_theatre_3d/js/wt3d-vue.js?v=' + Date.now(), function () {
-				if (window.WarehouseTheatre3D) window.WarehouseTheatre3D.init('wt3d-root');
-			});
-		});
-	});
+	// Feature modules register themselves with WarehouseTheatre3D before init(); ui.js first.
+	const FEATURES = ['ui', 'heatmap', 'locate', 'stock-actions', 'putaway', 'routing', 'routes', 'timeline', 'export', 'alerts'];
+	const bust = '?v=' + Date.now();
+
+	loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js')
+		.then(function () { return loadScript('https://unpkg.com/vue@3/dist/vue.global.prod.js'); })
+		.then(function () { return loadScript('/assets/warehouse_theatre_3d/js/wt3d-vue.js' + bust); })
+		.then(function () {
+			// Sequential so registration order is stable; a failed feature doesn't block the app.
+			return FEATURES.reduce(function (p, f) {
+				return p.then(function () {
+					return loadScript('/assets/warehouse_theatre_3d/js/features/' + f + '.js' + bust)
+						.catch(function (e) { console.error('WT3D:', e.message); });
+				});
+			}, Promise.resolve());
+		})
+		.then(function () {
+			if (window.WarehouseTheatre3D) window.WarehouseTheatre3D.init('wt3d-root');
+		})
+		.catch(function (e) { console.error('WT3D:', e.message); });
 };

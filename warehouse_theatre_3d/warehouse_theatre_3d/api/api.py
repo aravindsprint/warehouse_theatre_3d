@@ -39,6 +39,7 @@ def _int(v):
 
 @frappe.whitelist()
 def get_companies():
+	_require_view_permission()
 	return frappe.db.get_all('Company', fields=['name', 'abbr'], order_by='name asc')
 
 
@@ -47,15 +48,12 @@ def get_warehouse_groups(company=None):
 	"""Return all Floor warehouses grouped under their Building."""
 	_require_view_permission()
 	params = []
+	company_filter = ""
 	if company:
-		abbr = frappe.db.get_value('Company', company, 'abbr')
-		if abbr:
-			company_filter = "AND w.name LIKE %s"
-			params.append("%- " + abbr)
-		else:
-			company_filter = ""
-	else:
-		company_filter = ""
+		# Filter on the Warehouse.company field rather than the "- ABBR" name suffix,
+		# which breaks for warehouses that were renamed or created without the suffix.
+		company_filter = "AND w.company = %s"
+		params.append(company)
 
 	query = (
 		"SELECT "

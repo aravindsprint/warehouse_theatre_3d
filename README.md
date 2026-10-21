@@ -31,6 +31,15 @@ No relabeling required. A one-time setup wizard reads the warehouse hierarchy yo
 | **PWA support** | Installable, works offline with cached data |
 | **Mobile responsive** | Touch orbit/zoom, collapsible sidebar, on-screen aisle controls |
 | **Role-based access** | System Manager can edit; Stock Manager and Stock User get full view-only access |
+| **Heatmap modes** | Recolour bins by movement, pick frequency, stock value, stock age (FIFO estimate) or batch expiry instead of fill % — in 3D, 2D, tooltips and the legend |
+| **Item locator** | Type or scan (barcode/QR, batch or serial no.) an item; every bin holding it gets a beacon and the camera flies there. Other floors and unmapped warehouses are listed too |
+| **Stock actions** | Move stock between bins (Material Transfer), count a bin (Stock Reconciliation) and open the Stock Ledger, straight from the detail panel. Pick the target bin by clicking it on the map |
+| **Putaway suggestions** | For a Purchase Receipt, Stock Entry or Subcontracting Receipt (or typed items), rank bins by free capacity, distance from the dock, shelf height and what they already hold; one click makes a draft transfer |
+| **Spot the bottleneck** | Draw a Pick List's walking route in its saved order next to the shortest order, with metres and minutes saved; save the better order to a draft Pick List. "Aisle traffic" overlays every pick trip in a period to show congested walkways |
+| **Timeline replay** | Rebuild each bin's quantity day by day from the Stock Ledger and play it back (up to a year) |
+| **Export** | 3D view as PNG, printable floor plan as PNG or A4 PDF, bin list as CSV — in whatever colouring is active |
+| **Capacity alerts** | Toolbar badge for bins over the limit across all floors, plus an optional daily email (Warehouse Theatre Settings) |
+| **Company switcher** | Filter floors by company on multi-company sites |
 
 ---
 
@@ -102,6 +111,19 @@ No SQL, no manual custom field setup, no need to rename any warehouse.
 
 ---
 
+## 🧰 Using the tools
+
+The toolbar under the top bar holds the newer tools. A few things worth knowing:
+
+- **Set the dock first.** Open **Putaway** → *Set dock* and click the slot next to your receiving dock. Putaway distances and pick routes start there (otherwise the front-left corner).
+- **Mark aisles for accurate routes.** Routes walk along the gaps between rows. Gaps under 1 m are treated as back-to-back racking with no walkway, so set row gaps (or aisle rows) in **Edit floor plan** to match the real floor.
+- **Fill %, putaway and alerts need UOM capacities.** Bins without a capacity for a UOM are still suggested, but ranked lower and flagged "no capacity set".
+- **Stock actions create drafts by default.** "Submit now" on a move only applies to items without batch or serial numbers; tracked items are saved as drafts to finish in ERPNext. Counts always create a draft Stock Reconciliation.
+- **Replay is read-only.** While replaying, stock actions, putaway, routes and the locator are hidden, and heatmaps fall back to fill %.
+- **Capacity email:** turn it on in **Warehouse Theatre Settings** (`/app/warehouse-theatre-settings`) with thresholds and recipients. It runs daily.
+
+---
+
 ## 🔌 API reference
 
 All methods are under `warehouse_theatre_3d.warehouse_theatre_3d.api`:
@@ -118,6 +140,19 @@ All methods are under `warehouse_theatre_3d.warehouse_theatre_3d.api`:
 | `api` | `save_uom_capacity` | Sets per-UOM capacity for fill % |
 | `api` | `check_app_permission` | Controls visibility on the /apps screen |
 | `api` | `get_user_access` | Returns the current user's view/edit/setup status |
+| `insights` | `get_bin_metrics` | Per-bin movement, value, FIFO age, batch expiry and pick counts for a Floor |
+| `insights` | `search_items` / `resolve_scan` / `locate_item` | Item search, barcode/batch/serial lookup, and every bin holding an item |
+| `insights` | `get_timeline` | Opening balance + daily changes per bin from the Stock Ledger |
+| `insights` | `get_capacity_alerts` | Bins and floors at or above the thresholds |
+| `operations` | `get_bin_stock` | Every item in one bin, with batch/serial flags |
+| `operations` | `create_material_transfer` *(POST)* | Draft (or, for untracked items, submitted) Material Transfer between two bins |
+| `operations` | `create_stock_reconciliation` *(POST)* | Draft Stock Reconciliation from counted quantities |
+| `operations` | `get_receipt_items` / `get_putaway_plan` / `create_putaway_transfer` *(POST)* | Putaway suggestions and one draft transfer for the whole plan |
+| `operations` | `get_floor_meta` / `save_dock` *(POST)* | The Floor's dock slot |
+| `routes` | `get_pick_lists` / `get_pick_rows` / `get_period_pick_rows` | Pick List rows on a Floor |
+| `routes` | `reorder_pick_list` *(POST)* | Save a new row order to a draft Pick List |
+
+Methods marked *(POST)* write data. They run with the user's own ERPNext permissions (no `ignore_permissions`), so a user who can't create Stock Entries in ERPNext can't create them here either.
 
 ---
 
@@ -129,6 +164,15 @@ All methods are under `warehouse_theatre_3d.warehouse_theatre_3d.api`:
 | 3D engine | Three.js r128 |
 | Backend | Frappe / ERPNext v15 |
 | PWA | Web App Manifest + Service Worker |
+| Feature modules | `public/js/features/*.js`, each registering with `WarehouseTheatre3D.register()` before the app mounts |
+| On demand | html5-qrcode (scanning on browsers without `BarcodeDetector`), jsPDF (PDF export) |
+
+### Tests
+
+```bash
+python -m unittest discover -s tests        # putaway ranking, FIFO age, timeline, fill %, pick reordering
+node --test tests/routing.test.js           # aisle-aware route distances and optimisation
+```
 
 ---
 
