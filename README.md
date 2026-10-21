@@ -68,6 +68,8 @@ Available on the **Frappe Cloud Marketplace** — install it directly from your 
 
 For self-hosted benches, install it the same way you install any other Frappe app for your bench/site.
 
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
+
 Then open the app from the **/apps** screen, or go directly to `/warehouse-theatre-3d`.
 
 ---
