@@ -1,10 +1,12 @@
 /* Warehouse Theatre 3D — pick-route geometry (pure functions, no DOM or Three.js).
    Used by routes.js; also loadable in Node for tests: require('./routing.js').
 
-   Model: racks sit in rows along X. People walk along aisles ("lanes") that run
-   between rows, and switch lanes only via the cross-aisles at the two ends of the
-   rows. A gap narrower than MIN_AISLE between two rows is treated as back-to-back
-   racking with no walkway, unless the floor has no wider gaps at all.
+   Model: racks sit in rows along X and floor-storage zones occupy blocks of the grid.
+   People walk along aisles ("lanes") between rows and switch lanes at the floor's two
+   ends or through any gap between columns that no rack row or zone blocks. A gap
+   narrower than MIN_AISLE between two rack rows is back-to-back racking with no
+   walkway (unless the floor has no wider gaps); gaps next to floor zones are always
+   walkable, since people walk between piles.
    Units are scene units, which match metres closely (a rack bay is 2.2 wide). */
 (function (root) {
 'use strict';
@@ -15,60 +17,90 @@ const WALK_SPEED = 1.2;  // m/s
 const PICK_SECONDS = 20; // per stop, identical for both routes so savings are pure walking
 
 function buildFloor(layout, slotPos) {
-  const pos = Object.entries(slotPos).map(([wh, p]) => Object.assign({ wh }, p));
+  const pos = Object.entries(slotPos).map(([wh, p]) => Object.assign({ wh }, p, {
+    halfW: p.halfW || layout.SW / 2, halfD: p.halfD || layout.SD / 2, zone: p.kind === 'zone',
+  }));
   if (!pos.length) return null;
-  const bands = {};
-  pos.forEach(p => {
-    const z0 = p.z - layout.SD / 2, z1 = p.z + layout.SD / 2;
-    const b = bands[p.row];
-    bands[p.row] = b ? [Math.min(b[0], z0), Math.max(b[1], z1)] : [z0, z1];
-  });
-  const rows = Object.keys(bands).map(Number).sort((a, b) => bands[a][0] - bands[b][0]);
-  const xs = pos.map(p => p.x);
-  const xL = Math.min(...xs) - layout.SW / 2 - EDGE;
-  const xR = Math.max(...xs) + layout.SW / 2 + EDGE;
 
+  // Strips: z-ranges occupied by racks or floor zones, merged where they overlap
+  // (a zone spanning two rows joins both rows into one strip).
+  const spans = pos.map(p => ({ z0: p.z - p.halfD, z1: p.z + p.halfD, p })).sort((a, b) => a.z0 - b.z0);
+  const strips = [];
+  spans.forEach(sp => {
+    const last = strips[strips.length - 1];
+    if (last && sp.z0 < last.z1 - 1e-6) { last.z1 = Math.max(last.z1, sp.z1); last.members.push(sp.p); }
+    else strips.push({ z0: sp.z0, z1: sp.z1, members: [sp.p] });
+  });
+  strips.forEach(st => {
+    const racks = st.members.filter(m => !m.zone);
+    st.hasRack = racks.length > 0;
+    // Bays in a rack row stand back to back, so the row blocks crossing along its whole length.
+    st.rackX = st.hasRack ? [Math.min(...racks.map(m => m.x - m.halfW)), Math.max(...racks.map(m => m.x + m.halfW))] : null;
+  });
+
+  const xs0 = pos.map(p => p.x - p.halfW), xs1 = pos.map(p => p.x + p.halfW);
+  const xL = Math.min(...xs0) - EDGE;
+  const xR = Math.max(...xs1) + EDGE;
+
+  // Walkways between strips: wide gaps, or any gap next to floor storage (people walk
+  // between piles). Back-to-back rack rows (narrow gap, racks both sides) have none.
   const gaps = [];
-  for (let i = 0; i < rows.length - 1; i++) {
-    const g0 = bands[rows[i]][1], g1 = bands[rows[i + 1]][0];
-    gaps.push({ z: (g0 + g1) / 2, width: g1 - g0, between: [rows[i], rows[i + 1]] });
+  for (let i = 0; i < strips.length - 1; i++) {
+    const a = strips[i], b = strips[i + 1];
+    gaps.push({ z: (a.z1 + b.z0) / 2, width: b.z0 - a.z1, between: [i, i + 1], soft: !a.hasRack || !b.hasRack });
   }
-  const wide = gaps.filter(g => g.width >= MIN_AISLE);
-  const walk = wide.length ? wide : gaps;
+  const walkable = gaps.filter(g => g.width >= MIN_AISLE || g.soft);
+  const walk = walkable.length ? walkable : gaps;
+  const rowOf = st => st.members[0].row;
   const lanes = [
-    { z: bands[rows[0]][0] - EDGE, kind: 'front', between: [null, rows[0]] },
-    ...walk.map(g => ({ z: g.z, kind: 'aisle', between: g.between })),
-    { z: bands[rows[rows.length - 1]][1] + EDGE, kind: 'back', between: [rows[rows.length - 1], null] },
+    { z: strips[0].z0 - EDGE, kind: 'front', between: [null, rowOf(strips[0])] },
+    ...walk.map(g => ({ z: g.z, kind: 'aisle', between: [rowOf(strips[g.between[0]]), rowOf(strips[g.between[1]])] })),
+    { z: strips[strips.length - 1].z1 + EDGE, kind: 'back', between: [rowOf(strips[strips.length - 1]), null] },
   ].sort((a, b) => a.z - b.z);
 
-  // Lanes a row's pick face opens onto: the nearest lane on each side, provided no
-  // other rack row stands between the row and that lane.
+  // Lanes each strip's goods can be picked from: the nearest lane on each side,
+  // provided no other strip stands in between.
+  const accessBySlot = {};
   const access = {};
-  rows.forEach(r => {
-    const [z0, z1] = bands[r];
-    const blocked = (za, zb) => rows.some(o => o !== r && bands[o][0] >= za - 1e-6 && bands[o][1] <= zb + 1e-6);
+  strips.forEach(st => {
+    const blocked = (za, zb) => strips.some(o => o !== st && o.z0 >= za - 1e-6 && o.z1 <= zb + 1e-6);
     const opts = [];
     let above = -1, below = -1;
-    lanes.forEach((l, i) => { if (l.z < z0) above = i; if (l.z > z1 && below < 0) below = i; });
-    if (above >= 0 && !blocked(lanes[above].z, z0)) opts.push(above);
-    if (below >= 0 && !blocked(z1, lanes[below].z)) opts.push(below);
+    lanes.forEach((l, i) => { if (l.z < st.z0) above = i; if (l.z > st.z1 && below < 0) below = i; });
+    if (above >= 0 && !blocked(lanes[above].z, st.z0)) opts.push(above);
+    if (below >= 0 && !blocked(st.z1, lanes[below].z)) opts.push(below);
     if (!opts.length) {
-      // Fully enclosed row (rare): fall back to the nearest lane so routes still draw.
       let best = 0;
-      lanes.forEach((l, i) => { if (Math.abs(l.z - (z0 + z1) / 2) < Math.abs(lanes[best].z - (z0 + z1) / 2)) best = i; });
+      const mid = (st.z0 + st.z1) / 2;
+      lanes.forEach((l, i) => { if (Math.abs(l.z - mid) < Math.abs(lanes[best].z - mid)) best = i; });
       opts.push(best);
     }
-    access[r] = opts;
+    st.members.forEach(m => { accessBySlot[m.wh] = opts; if (access[m.row] === undefined) access[m.row] = opts; });
   });
 
-  return { lanes, xL, xR, bands, rows, access, slotPos };
+  // Where you can switch between two lanes: the floor's two ends, plus any column gap
+  // that no rack row or zone blocks between those lanes.
+  const colGaps = [];
+  if (layout.ox !== undefined && layout.cols > 1) {
+    for (let c = 1; c < layout.cols; c++) colGaps.push(layout.ox + c * (layout.SW + layout.GAP) - layout.GAP / 2);
+  }
+  const blocksAt = (st, E) => (st.rackX && E >= st.rackX[0] - .05 && E <= st.rackX[1] + .05) ||
+    st.members.some(m => Math.abs(E - m.x) < m.halfW + .05);
+  const cross = lanes.map((li, i) => lanes.map((lj, j) => {
+    if (i === j) return [];
+    const za = Math.min(li.z, lj.z), zb = Math.max(li.z, lj.z);
+    const between = strips.filter(st => st.z0 > za - 1e-6 && st.z1 < zb + 1e-6);
+    return [xL, xR, ...colGaps.filter(E => !between.some(st => blocksAt(st, E)))];
+  }));
+
+  return { lanes, xL, xR, strips, access, accessBySlot, cross, slotPos };
 }
 
 /* A visit point: where to stand for a slot, with the lanes it can be picked from. */
 function stopFor(floor, slotWh) {
   const p = floor.slotPos[slotWh];
   if (!p) return null;
-  return { slot: slotWh, x: p.x, opts: floor.access[p.row] || [0] };
+  return { slot: slotWh, x: p.x, opts: floor.accessBySlot[slotWh] || [0] };
 }
 function dockStop(floor, dockSlot) {
   const s = dockSlot && stopFor(floor, dockSlot);
@@ -76,19 +108,24 @@ function dockStop(floor, dockSlot) {
   return { slot: null, x: floor.xL, opts: [0], dock: true };   // front-left corner
 }
 
-/* Walking distance between two points standing on lanes li and lj. */
+/* Walking distance between two points standing on lanes li and lj, crossing between
+   lanes at the best open crossing point. */
+function bestCross(floor, x1, li, x2, lj) {
+  let best = null, bd = Infinity;
+  (floor.cross[li][lj] || [floor.xL, floor.xR]).forEach(E => {
+    const d = Math.abs(x1 - E) + Math.abs(x2 - E);
+    if (d < bd) { bd = d; best = E; }
+  });
+  return { E: best, d: bd };
+}
 function legDist(floor, x1, li, x2, lj) {
   if (li === lj) return Math.abs(x1 - x2);
-  const dz = Math.abs(floor.lanes[li].z - floor.lanes[lj].z);
-  return Math.min(Math.abs(x1 - floor.xL) + Math.abs(x2 - floor.xL),
-                  Math.abs(x1 - floor.xR) + Math.abs(x2 - floor.xR)) + dz;
+  return bestCross(floor, x1, li, x2, lj).d + Math.abs(floor.lanes[li].z - floor.lanes[lj].z);
 }
 function legPath(floor, x1, li, x2, lj) {
   const z1 = floor.lanes[li].z, z2 = floor.lanes[lj].z;
   if (li === lj) return [[x2, z2]];
-  const viaL = Math.abs(x1 - floor.xL) + Math.abs(x2 - floor.xL);
-  const viaR = Math.abs(x1 - floor.xR) + Math.abs(x2 - floor.xR);
-  const E = viaL <= viaR ? floor.xL : floor.xR;
+  const E = bestCross(floor, x1, li, x2, lj).E;
   return [[E, z1], [E, z2], [x2, z2]];
 }
 

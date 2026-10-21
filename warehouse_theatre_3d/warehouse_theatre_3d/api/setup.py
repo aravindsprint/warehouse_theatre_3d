@@ -101,7 +101,8 @@ def apply_depth_mapping(mapping, company=None):
 	"""
 	mapping: JSON list like [{"depth": 1, "role": "Building"}, {"depth": 2, "role": "Floor"}, ...]
 	role is one of: Building, Floor, Slot, Bin, Skip
-	Writes wt_warehouse_type to every warehouse at each mapped depth.
+	Writes wt_warehouse_type to every warehouse at each mapped depth, then marks
+	floor-storage warehouses as Zone (see refine_roles).
 	Does not rename, move, or otherwise alter the warehouse tree.
 	"""
 	_require_edit_permission()
@@ -125,7 +126,7 @@ def apply_depth_mapping(mapping, company=None):
 	warehouses = frappe.get_all(
 		"Warehouse",
 		filters=filters,
-		fields=["name", "parent_warehouse", "disabled"],
+		fields=["name", "parent_warehouse", "disabled", "is_group"],
 	)
 	by_name = {w.name: w for w in warehouses}
 
@@ -139,17 +140,54 @@ def apply_depth_mapping(mapping, company=None):
 			return 1
 		return 1 + _depth(w.parent_warehouse, _seen)
 
-	updated = 0
+	roles = {}
 	for w in warehouses:
 		if w.disabled:
 			continue
-		d = _depth(w.name)
-		role = depth_to_role.get(d)
+		role = depth_to_role.get(_depth(w.name))
 		if role:
-			frappe.db.set_value("Warehouse", w.name, "wt_warehouse_type", role, update_modified=False)
-			updated += 1
+			roles[w.name] = role
+	roles = refine_roles([w for w in warehouses if not w.disabled], roles)
 
-	return {"ok": True, "updated": updated}
+	for name, role in roles.items():
+		frappe.db.set_value("Warehouse", name, "wt_warehouse_type", role, update_modified=False)
+	zones = sum(1 for r in roles.values() if r == "Zone")
+	return {"ok": True, "updated": len(roles), "zones": zones}
+
+
+def refine_roles(warehouses, roles):
+	"""Turn floor-storage warehouses into Zones after the per-depth mapping.
+
+	Depth mapping assumes every branch is Floor → Slot (rack) → Bin (shelf). Godowns
+	where stock sits on the floor break that: a godown that is a single warehouse, or
+	an area warehouse with no shelves under it. Those become Zones, which the app
+	draws as floor stacks:
+	- a Floor or Slot that holds stock itself (not a group, no children)
+	- a Bin that isn't under a Slot on a Floor (it would never be shown otherwise)
+	A Zone directly under a Floor is placed on that floor; any other Zone shows as
+	its own floor in the sidebar.
+
+	warehouses: [{name, parent_warehouse, is_group}]; roles: {name: role}.
+	Returns a new {name: role}.
+	"""
+	parent_of = {w["name"]: w.get("parent_warehouse") for w in warehouses}
+	children = {}
+	for w in warehouses:
+		if w.get("parent_warehouse"):
+			children.setdefault(w["parent_warehouse"], []).append(w["name"])
+	out = dict(roles)
+	for w in warehouses:
+		name = w["name"]
+		role = roles.get(name)
+		leaf = not w.get("is_group") and not children.get(name)
+		if role in ("Floor", "Slot") and leaf:
+			out[name] = "Zone"
+		elif role == "Bin":
+			parent = w.get("parent_warehouse")
+			grand = parent_of.get(parent)
+			if roles.get(parent) != "Slot" or roles.get(grand) != "Floor":
+				out[name] = "Zone"
+	return out
 
 
 @frappe.whitelist()

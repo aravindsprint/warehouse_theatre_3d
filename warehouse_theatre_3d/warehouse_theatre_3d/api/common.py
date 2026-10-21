@@ -31,10 +31,12 @@ def parse_json(value, default=None):
 
 
 def get_floor_bins(floor):
-	"""All enabled Bin warehouses under the Slots of one Floor, with slot grid position.
+	"""Every stock location on one Floor: Bins under its Slots (racks) and its Zones
+	(floor storage), with grid position.
 
 	`level` is the Bin's index inside its Slot, using the same ordering as
-	api._get_levels() so it matches the shelf order drawn in 3D.
+	api._get_levels() so it matches the shelf order drawn in 3D. A Zone is its own
+	slot at level 0.
 	"""
 	rows = frappe.db.sql(
 		"""
@@ -56,7 +58,23 @@ def get_floor_bins(floor):
 	for r in rows:
 		r["level"] = level_by_slot.get(r["slot"], 0)
 		level_by_slot[r["slot"]] = r["level"] + 1
-	return rows
+
+	# Floor-storage Zones hold stock themselves: each is its own "slot" with one level.
+	# `floor` may also be a standalone Zone (a godown kept as a single warehouse).
+	zones = frappe.db.sql(
+		"""
+		SELECT z.name AS wh, %(label)s AS label, z.name AS slot, z.warehouse_name AS slot_label,
+		       COALESCE(z.wt_row, 0) AS `row`, COALESCE(z.wt_col, 0) AS col,
+		       COALESCE(z.wt_row_gap, 0) AS row_gap, z.company AS company, 0 AS level
+		FROM `tabWarehouse` z
+		WHERE (z.parent_warehouse = %(floor)s OR z.name = %(floor)s)
+		  AND z.wt_warehouse_type = 'Zone' AND z.disabled = 0
+		ORDER BY z.wt_row, z.wt_col, z.warehouse_name
+		""",
+		{"floor": floor, "label": "Floor stack"},
+		as_dict=True,
+	)
+	return rows + zones
 
 
 def get_uom_capacities(warehouses):

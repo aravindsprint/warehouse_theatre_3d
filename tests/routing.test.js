@@ -21,6 +21,60 @@ function makeFloor(rows, cols, rowGaps = {}) {
   return { layout, slotPos };
 }
 
+// Zones: same grid maths, with ox/cols like engine.layout and zone footprints.
+function makeZoneFloor(cells, cols, rows) {
+  const SW = 2.2, SD = 2.2, GAP = 0.6;
+  const ox = -(cols * (SW + GAP) - GAP) / 2;
+  const oz = -(rows * (SD + GAP) - GAP) / 2;
+  const layout = { SW, SD, GAP, ox, cols };
+  const slotPos = {};
+  cells.forEach(([wh, r, c, kind, w = 1, d = 1]) => {
+    const width = w * (SW + GAP) - GAP, depth = d * (SD + GAP) - GAP;
+    slotPos[wh] = { x: ox + c * (SW + GAP) + width / 2, z: oz + r * (SD + GAP) + depth / 2, row: r, col: c,
+      kind, halfW: width / 2, halfD: depth / 2 };
+  });
+  return { layout, slotPos };
+}
+
+test('floor zones: gaps between piles are walkways even when narrow', () => {
+  const { layout, slotPos } = makeZoneFloor([['Z1', 0, 0, 'zone'], ['Z2', 1, 0, 'zone']], 1, 2);
+  const f = R.buildFloor(layout, slotPos);
+  assert.equal(f.lanes.length, 3);                 // front, between the piles, back
+  assert.deepEqual(f.accessBySlot.Z1, [0, 1]);
+});
+
+test('floor zones: people cut through the gap between piles instead of going round the ends', () => {
+  // 2 rows x 5 columns of single-cell zones; walk from lane 0 to lane 2 at the middle column
+  const cells = [];
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 5; c++) cells.push([`Z${r}${c}`, r, c, 'zone']);
+  const { layout, slotPos } = makeZoneFloor(cells, 5, 2);
+  const f = R.buildFloor(layout, slotPos);
+  const x = slotPos.Z02.x;
+  const dz = Math.abs(f.lanes[0].z - f.lanes[2].z);
+  const viaGap = R.legDist(f, x, 0, x, 2);
+  assert.ok(viaGap < dz + 3, `expected a short cut, got ${viaGap}`);
+  assert.ok(viaGap < Math.abs(x - f.xL) * 2 + dz, 'should beat walking round the end');
+});
+
+test('mixed floor: a rack row still blocks crossing along its length', () => {
+  // row 0: racks across all 5 columns; row 1: zones
+  const cells = [];
+  for (let c = 0; c < 5; c++) cells.push([`R${c}`, 0, c, 'rack'], [`Z${c}`, 1, c, 'zone']);
+  const { layout, slotPos } = makeZoneFloor(cells, 5, 2);
+  const f = R.buildFloor(layout, slotPos);
+  const front = 0, between = 1;
+  assert.deepEqual(f.cross[front][between], [f.xL, f.xR]);   // only round the rack row's ends
+  assert.ok(f.cross[between][2].length > 2);                  // between the zones you can cut through
+});
+
+test('a zone spanning two rows merges them into one block', () => {
+  const { layout, slotPos } = makeZoneFloor([['BIG', 0, 0, 'zone', 2, 2], ['Z', 0, 2, 'zone'], ['Z2', 1, 2, 'zone']], 3, 2);
+  const f = R.buildFloor(layout, slotPos);
+  assert.equal(f.strips.length, 1);
+  const r = R.compare(f, null, [{ s: 'BIG' }, { s: 'Z2' }, { s: 'Z' }], x => x.s);
+  assert.ok(r.optimized.distance <= r.current.distance + 1e-9 && r.stops === 3);
+});
+
 test('rows with wide gaps get an aisle between each pair; slots open onto both sides', () => {
   const { layout, slotPos } = makeFloor([0, 1, 2], 4, { 0: 1.5, 1: 1.5 });
   const f = R.buildFloor(layout, slotPos);

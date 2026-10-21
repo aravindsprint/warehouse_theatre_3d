@@ -324,11 +324,13 @@ def locate_item(item_code, company=None):
 		SELECT b.warehouse AS wh, w.warehouse_name AS label, w.wt_warehouse_type AS wt_type,
 		       b.actual_qty AS qty, b.reserved_qty AS reserved, b.stock_value AS value,
 		       s.name AS slot, s.warehouse_name AS slot_label,
-		       f.name AS floor, f.warehouse_name AS floor_label
+		       f.name AS floor, f.warehouse_name AS floor_label,
+		       zf.name AS zone_floor, zf.warehouse_name AS zone_floor_label
 		FROM `tabBin` b
 		INNER JOIN `tabWarehouse` w ON w.name = b.warehouse
 		LEFT JOIN `tabWarehouse` s ON s.name = w.parent_warehouse AND s.wt_warehouse_type = 'Slot'
 		LEFT JOIN `tabWarehouse` f ON f.name = s.parent_warehouse AND f.wt_warehouse_type = 'Floor'
+		LEFT JOIN `tabWarehouse` zf ON zf.name = w.parent_warehouse AND zf.wt_warehouse_type = 'Floor'
 		WHERE b.item_code = %(item)s AND b.actual_qty != 0
 		  AND (%(company)s IS NULL OR w.company = %(company)s)
 		ORDER BY b.actual_qty DESC
@@ -337,7 +339,14 @@ def locate_item(item_code, company=None):
 		as_dict=True,
 	)
 	for r in rows:
-		r["mapped"] = bool(r.wt_type == "Bin" and r.slot and r.floor)
+		if r.wt_type == "Zone":
+			# Floor storage: the Zone is the slot; its floor is the parent Floor, or the
+			# Zone itself for a godown kept as a single warehouse.
+			r.update(slot=r.wh, slot_label=r.label, label="Floor stack",
+			         floor=r.zone_floor or r.wh, floor_label=r.zone_floor_label or r.label)
+		r["mapped"] = bool(r.wt_type in ("Bin", "Zone") and r.slot and r.floor)
+		r.pop("zone_floor", None)
+		r.pop("zone_floor_label", None)
 	return {"item": item, "locations": rows}
 
 
@@ -419,6 +428,21 @@ def compute_capacity_alerts(company=None, bin_threshold=95, floor_threshold=85):
 		{"company": company or None},
 		as_dict=True,
 	)
+	zones = frappe.db.sql(
+		"""
+		SELECT z.name AS wh, 'Floor stack' AS label, z.name AS slot, z.warehouse_name AS slot_label,
+		       IF(IFNULL(p.wt_warehouse_type, '') = 'Floor', p.name, z.name) AS floor,
+		       IF(IFNULL(p.wt_warehouse_type, '') = 'Floor', p.warehouse_name, z.warehouse_name) AS floor_label
+		FROM `tabWarehouse` z
+		LEFT JOIN `tabWarehouse` p ON p.name = z.parent_warehouse
+		WHERE z.wt_warehouse_type = 'Zone' AND z.disabled = 0
+		  AND (p.name IS NULL OR p.disabled = 0)
+		  AND (%(company)s IS NULL OR z.company = %(company)s)
+		""",
+		{"company": company or None},
+		as_dict=True,
+	)
+	bins = list(bins) + list(zones)
 	whs = [b.wh for b in bins]
 	caps = get_uom_capacities(whs)
 	qtys = get_uom_quantities(whs)

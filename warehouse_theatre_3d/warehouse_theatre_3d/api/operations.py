@@ -344,7 +344,10 @@ def get_floor_meta(group_warehouse):
 def save_dock(group_warehouse, slot_warehouse=None):
 	"""Remember which Slot is next to the receiving dock (used by putaway and routes)."""
 	_require_edit_permission()
-	if slot_warehouse and frappe.db.get_value("Warehouse", slot_warehouse, "parent_warehouse") != group_warehouse:
+	# A standalone Zone is its own floor, so it can be its own dock.
+	on_floor = slot_warehouse == group_warehouse or \
+		frappe.db.get_value("Warehouse", slot_warehouse, "parent_warehouse") == group_warehouse
+	if slot_warehouse and not on_floor:
 		frappe.throw("The dock slot must be on this floor.")
 	frappe.db.set_value("Warehouse", group_warehouse, "wt_dock_slot", slot_warehouse or None)
 	return {"ok": True, "dock_slot": slot_warehouse}

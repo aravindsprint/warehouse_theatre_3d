@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="warehouse_theatre_3d",
-    version="0.2.1",
+    version="0.3.0",
     description="Free 3D & 2D warehouse storage visualization for any ERPNext warehouse hierarchy",
     author="Aravind G",
     author_email="aravindsprint@gmail.com",

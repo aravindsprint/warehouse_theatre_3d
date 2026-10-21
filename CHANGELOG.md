@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.0 (2026-10-21)
+
+Support for godowns without racks, where stock sits on the floor.
+
+- **Floor zones:** a new warehouse type, **Zone**, for an area of the floor where stock is stacked. It's drawn as a painted area with bales piled to its fill %, and can span several grid cells (width × depth).
+- **Works with how godowns are already set up in ERPNext:**
+  - a godown split into area warehouses: the godown is the floor and each area is a zone
+  - a godown kept as a single warehouse: it shows as its own floor
+  - a floor with racks and floor areas: both on the same floor
+- **Setup detects floor storage automatically:** any warehouse that holds stock with no shelves under it becomes a zone. Existing sites can re-run setup, or set the type to Zone in Manage Warehouses.
+- **Every tool works on zones:** heatmaps, locate, move/count stock, putaway, replay, export, capacity alerts.
+- **Pick routes:** people walk between piles and cut through gaps between floor areas, while rack rows still block crossing along their length.
+- Floor-plan editor: a zone's cell span sets its width.
+
 ## v0.2.1 (2026-10-21)
 
 Fixes the Frappe Cloud Marketplace audit findings.
