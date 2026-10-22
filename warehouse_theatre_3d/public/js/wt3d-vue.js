@@ -774,6 +774,10 @@ class ThreeEngine {
     return g;
   }
 
+  resetView() {
+    this.tT=.65; this.tP=.78; this.tR=28; this.tPX=0; this.tPZ=0;
+  }
+
   flyTo(x, z, radius) {
     if (this.aisleMode) return;
     this.tPX = x; this.tPZ = z;
@@ -889,7 +893,7 @@ class ThreeEngine {
     this.aisleMode = false;
     store.aisleMode = false;
     // Restore orbit view
-    this.tT=.65; this.tP=.78; this.tR=28; this.tPX=0; this.tPZ=0;
+    this.resetView();
   }
 
   moveAisle(forward, strafe, turnY, turnX) {
@@ -1400,6 +1404,9 @@ const actions = {
     try {
       const slots = await call('get_slots',{group_warehouse:g.id});
       store.slots=slots||[];
+      // A new floor starts from the default camera; a pan or zoom from flying to a
+      // bin on the previous floor would otherwise leave this floor off-screen.
+      if (changed && !engine.aisleMode) engine.resetView();
       if (store.curView==='3d') {
         engine.buildScene(filteredSlots());
         if (changed) engine.springIn();
