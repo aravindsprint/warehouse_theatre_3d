@@ -1,8 +1,14 @@
 # Changelog
 
-## v0.6.0 (2026-10-23)
+## v1.0.0 (2026-10-23)
 
-**Warehouse Scan**: a phone app at `/warehouse-scan` for the people on the floor. Run `bench migrate` after updating (two new Warehouse fields).
+First stable release. Three big additions since v0.3.1: **Warehouse Scan**, a phone app for the people on the floor; the warehouse map **inside ERPNext forms**; and **Stock Health**, a report that works the moment the app is installed.
+
+Upgrading: run `bench migrate` (two new Warehouse fields) and `bench build`.
+
+### Warehouse Scan
+
+A phone app at `/warehouse-scan`.
 
 - **Put away:** scan a receipt (or one item), go to the suggested location, scan its label, confirm the quantity. Posts one Material Transfer, submitted unless batch/serial numbers are needed.
 - **Pick:** walk a draft Pick List stop by stop in walking order. Scan the shelf, then the items; wrong items and wrong batches are caught; short picks and picking from another shelf are recorded. Save, or save and submit.
@@ -15,9 +21,9 @@
 - Proper home-screen icons (PNG 192/512, maskable, and Apple touch icons) for both Warehouse Scan and the 3D app, so both install cleanly on Android and show an icon on iPhone. Warehouse Scan has its own icon and `/apps` tile.
 - New buttons in ERPNext: **Pick with scanner** (draft Pick List), **Put away with scanner** (submitted receipts), **Count with scanner** (mapped Bin/Zone warehouses), and a **Warehouse Scan** tile on `/apps`.
 
-## v0.5.0 (2026-10-22)
+### Inside ERPNext forms
 
-**Warehouse map inside ERPNext forms**, so people reach the app from the screens they already work in.
+The warehouse map from the screens people already work in.
 
 - **Item:** a "Warehouse locations" panel on the form showing where the item is stored (Floor › Rack › Shelf, or the warehouse when it isn't mapped), with a link to each spot on the map, and a **Show on warehouse map** button.
 - **Stock Entry, Purchase Receipt, Subcontracting Receipt, Delivery Note, Pick List, Material Request** (and Purchase / Sales Invoices that update stock): **Show on warehouse map** opens the document with every line's source (orange) and target (green) marked, numbered like the document's lines. Lines on other floors and warehouses not on the map are listed too.
@@ -27,9 +33,9 @@
 - Buttons appear under a "Warehouse map" menu, only for System Manager, Stock Manager and Stock User.
 - The app also accepts these links directly: `?locate=ITEM`, `?focus=WAREHOUSE`, `?doc=DOCTYPE&name=NAME`, `?putaway=DOCTYPE&name=NAME`, `?route=PICK_LIST`.
 
-## v0.4.0 (2026-10-22)
+### Stock Health
 
-**Stock Health**: a report that works the moment the app is installed, from data every ERPNext site already has. No warehouse mapping needed.
+A report that works the moment the app is installed, from data every ERPNext site already has. No warehouse mapping needed.
 
 - **Dead stock:** items with no outward movement in 30 / 90 / 180 / 365 days, by value.
 - **Slow movers:** items that would take more than 6 months to use up at the current rate.
