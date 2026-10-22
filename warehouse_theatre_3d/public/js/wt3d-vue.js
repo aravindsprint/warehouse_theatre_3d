@@ -493,6 +493,7 @@ const CSS = `
 .wt-wm-badge.Floor{background:rgba(96,165,250,.18);color:#60a5fa}
 .wt-wm-badge.Slot{background:rgba(74,222,128,.18);color:#4ade80}
 .wt-wm-badge.Bin{background:rgba(251,191,36,.18);color:#fbbf24}
+.wt-wm-badge.Zone{background:rgba(217,119,6,.2);color:#f59e0b}
 .wt-wm-badge.disabled{background:rgba(248,113,113,.18);color:#f87171}
 .wt-wm-icon-btn{width:24px;height:24px;border-radius:5px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:rgba(255,255,255,.6);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0}
 .wt-wm-icon-btn:hover{background:rgba(255,255,255,.14);color:#fff}
@@ -540,6 +541,11 @@ const CSS = `
   #wt-whform-modal{width:calc(100vw - 24px)}
 }
 
+.wt-2d-tile.zone{border-style:dashed;min-height:64px;justify-content:center}
+.wt-2d-sec-zone{grid-column:1 / -1}
+@media(max-width:600px){.wt-2d-sec-zone .wt-2d-slots{overflow-x:auto}}
+.wt-2d-zone-tag{font-size:8px;font-weight:700;color:#d97706;letter-spacing:.3px;text-transform:uppercase;margin-top:1px}
+#wt-app.dark .wt-2d-zone-tag{color:#fbbf24}
 .wt-tt-extra{font-size:9px;color:var(--wt-text2);margin-top:5px;line-height:1.4}
 .wt-tt-extra+.wt-tt-extra{margin-top:1px}
 
@@ -642,7 +648,7 @@ const store = reactive({
   whForm: {
     name: null, warehouse_name: '', company: '', wt_warehouse_type: 'Slot',
     parent_warehouse: '', is_group: true, wt_row: 0, wt_col: 0, wt_row_gap: 0,
-    uom_capacities: [],
+    wt_zone_w: 1, wt_zone_d: 1, uom_capacities: [],
   },
   whParentOptions: [],
   whCompanies: [],
@@ -901,8 +907,9 @@ class ThreeEngine {
     this.slotPos={};
     store.selKey=null;
     const SW=2.2, SD=2.2, GAP=.6, LVH=1.0, BASE=.1;
-    const cols=Math.max(...slots.map(s=>s.col),0)+1;
-    const maxRow=Math.max(...slots.map(s=>s.row),0);
+    // Floor zones can span several grid cells (w columns × d rows).
+    const cols=Math.max(...slots.map(s=>s.col+(s.kind==='zone'?(s.w||1):1)),1);
+    const maxRow=Math.max(...slots.map(s=>s.row+(s.kind==='zone'?(s.d||1):1)-1),0);
     const rowZOffset={};
     let cumZ=0;
     for (let r=0;r<=maxRow;r++){
@@ -922,11 +929,13 @@ class ThreeEngine {
     this.scene.fog.color.setHex(bgCol);
     this.renderer.setClearColor(bgCol,1);
     this.layout={SW,SD,GAP,LVH,BASE,ox,oz,cols,maxRow,rowZOffset,totalDepth,width:cols*(SW+GAP)-GAP};
+    const G={SW,SD,GAP,ox,oz,rowZOffset};
     slots.forEach(sl=>{
+      if (sl.kind==='zone') { this._buildZone(sl,G); return; }
       const nL=sl.levels.length;
       const cx=ox+sl.col*(SW+GAP)+SW/2;
       const cz=oz+(rowZOffset[sl.row]||0)+SD/2;
-      this.slotPos[sl.wh]={x:cx,z:cz,row:sl.row,col:sl.col,levels:nL,
+      this.slotPos[sl.wh]={x:cx,z:cz,row:sl.row,col:sl.col,levels:nL,kind:'rack',halfW:SW/2,halfD:SD/2,
         levelY:sl.levels.map((_,li)=>BASE+li*LVH+LVH/2),top:BASE+nL*LVH};
       const base=new THREE.Mesh(new THREE.BoxGeometry(SW,BASE,SD),baseMat);
       base.position.set(cx,BASE/2,cz); base.castShadow=true; base.receiveShadow=true;
@@ -974,6 +983,66 @@ class ThreeEngine {
     bus.emit('scene-built', slots);
   }
 
+  /* Floor storage: a painted area on the floor with stock piled as bales whose count
+     follows the zone's fill %. Spans w columns × d rows of the slot grid. */
+  _buildZone(sl,G) {
+    const THREE=window.THREE;
+    const {SW,SD,GAP,ox,oz,rowZOffset}=G;
+    const w=Math.max(1,sl.w||1), d=Math.max(1,sl.d||1);
+    const lv=sl.levels[0];
+    const width=w*(SW+GAP)-GAP;
+    const z0=oz+(rowZOffset[sl.row]||0);
+    const z1=oz+(rowZOffset[sl.row+d-1]!==undefined?rowZOffset[sl.row+d-1]:rowZOffset[sl.row]||0)+SD;
+    const depth=z1-z0;
+    const cx=ox+sl.col*(SW+GAP)+width/2, cz=(z0+z1)/2;
+    const hs=(lv.uoms||[]).some(u=>u.qty>0);
+    const hc=levelColorHex(lv,sl);
+    const col=hc!==null?hc:(store.isDark?0x101827:0xe8edf5);
+
+    // Painted floor area + edge lines
+    const plate=new THREE.Mesh(new THREE.BoxGeometry(width,.02,depth),
+      new THREE.MeshStandardMaterial({color:hc!==null?col:(store.isDark?0x0f1520:0xdde3ef),transparent:true,
+        opacity:hs?.22:hc!==null?.16:.1,roughness:.9,depthWrite:false}));
+    plate.position.set(cx,.012,cz); plate.receiveShadow=true;
+    this.rootGrp.add(plate);
+    const lineMat=new THREE.MeshBasicMaterial({color:store.isDark?0xfbbf24:0xd97706,transparent:true,opacity:.7});
+    [[width,.06,0,-depth/2],[width,.06,0,depth/2],[.06,depth,-width/2,0],[.06,depth,width/2,0]].forEach(([lw,ld,dx,dz])=>{
+      const ln=new THREE.Mesh(new THREE.BoxGeometry(lw,.025,ld),lineMat);
+      ln.position.set(cx+dx,.02,cz+dz); this.rootGrp.add(ln);
+    });
+
+    // Bales: 2×2 per grid cell, up to 3 layers, filled bottom layer first.
+    const NX=2*w, NZ=2*d, LAYERS=3, BH=.5;
+    const cellW=width/NX, cellD=depth/NZ;
+    const total=NX*NZ*LAYERS;
+    const count=hs?Math.max(1,Math.round(lvFill(lv)/100*total)):0;
+    let fillM=null, pileH=0;
+    if (count){
+      fillM=new THREE.InstancedMesh(new THREE.BoxGeometry(cellW*.86,BH*.92,cellD*.86),
+        new THREE.MeshStandardMaterial({color:col,roughness:.6,metalness:.05,emissive:col,emissiveIntensity:.2}),count);
+      const m=new THREE.Matrix4(), q=new THREE.Quaternion(), e=new THREE.Euler(), sc=new THREE.Vector3(1,1,1), pos=new THREE.Vector3();
+      for (let i=0;i<count;i++){
+        const layer=Math.floor(i/(NX*NZ)), k=i%(NX*NZ), ix=k%NX, iz=Math.floor(k/NX);
+        const jitter=((i*7919)%13)/13-.5;   // stable, slightly uneven stacking
+        pos.set(ox+sl.col*(SW+GAP)+cellW*(ix+.5)+jitter*.06, BH*(layer+.5)+.02, z0+cellD*(iz+.5)-jitter*.05);
+        e.set(0,jitter*.12,0); q.setFromEuler(e);
+        m.compose(pos,q,sc); fillM.setMatrixAt(i,m);
+      }
+      fillM.castShadow=true;
+      this.rootGrp.add(fillM);
+      pileH=BH*Math.ceil(count/(NX*NZ));
+    }
+    const top=Math.max(pileH,.35);
+    const proxy=new THREE.Mesh(new THREE.BoxGeometry(width,Math.max(top,.6),depth),
+      new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false}));
+    proxy.position.set(cx,Math.max(top,.6)/2,cz);
+    proxy.userData={slot:sl,lv,key:lvKey(sl,lv)};
+    this.rootGrp.add(proxy);
+    this.meshMap[lvKey(sl,lv)]={fillM,shellM:plate,proxy,lv,slot:sl,li:0,col,zone:true};
+    this.slotPos[sl.wh]={x:cx,z:cz,row:sl.row,col:sl.col,levels:1,kind:'zone',w,d,halfW:width/2,halfD:depth/2,
+      levelY:[top/2],top};
+  }
+
   /* Recolour existing meshes (heatmap mode change) without rebuilding geometry. */
   recolor() { this.highlight(store.selKey); }
 
@@ -981,7 +1050,7 @@ class ThreeEngine {
     store.selKey=key;
     const selLv=key?this.meshMap[key]?.lv:null;
     Object.entries(this.meshMap).forEach(([k,d])=>{
-      const isSel=k===key, same=selLv&&d.lv.label===selLv.label;
+      const isSel=k===key, same=!!selLv&&!d.zone&&d.lv.label===selLv.label;
       const hs=(d.lv.uoms||[]).some(u=>u.qty>0);
       const hc=levelColorHex(d.lv,d.slot);
       const tinted=hc!==null;
@@ -992,7 +1061,7 @@ class ThreeEngine {
         d.fillM.material.emissiveIntensity=isSel?.6:same?.28:.2;
       }
       d.shellM.material.color.setHex(isSel?0x3b82f6:same?0x1e40af:tinted?col:0x0f1520);
-      d.shellM.material.opacity=isSel?.4:same?.22:hs?.13:tinted?.1:.06;
+      d.shellM.material.opacity=d.zone?(isSel?.45:hs?.22:tinted?.16:.1):(isSel?.4:same?.22:hs?.13:tinted?.1:.06);
     });
   }
 
@@ -1516,6 +1585,8 @@ const actions = {
           wt_row: d.wt_row || 0,
           wt_col: d.wt_col || 0,
           wt_row_gap: d.wt_row_gap || 0,
+          wt_zone_w: d.wt_zone_w || 1,
+          wt_zone_d: d.wt_zone_d || 1,
           uom_capacities: (d.uom_capacities||[]).map(r=>({uom:r.uom, capacity:r.capacity})),
         };
       } catch(e) {
@@ -1532,14 +1603,14 @@ const actions = {
           name: null, warehouse_name: '',
           company: parentDetail.company || store.whCompanies[0]?.name || '',
           wt_warehouse_type: 'Bin', parent_warehouse: presetParent, is_group: false,
-          wt_row: 0, wt_col: 0, wt_row_gap: 0, uom_capacities: [],
+          wt_row: 0, wt_col: 0, wt_row_gap: 0, wt_zone_w: 1, wt_zone_d: 1, uom_capacities: [],
         };
       } catch(e) {
         store.whFormError = 'Failed to load slot: '+e.message;
         store.whForm = {
           name: null, warehouse_name: '', company: store.whCompanies[0]?.name || '',
           wt_warehouse_type: 'Bin', parent_warehouse: presetParent, is_group: false,
-          wt_row: 0, wt_col: 0, wt_row_gap: 0, uom_capacities: [],
+          wt_row: 0, wt_col: 0, wt_row_gap: 0, wt_zone_w: 1, wt_zone_d: 1, uom_capacities: [],
         };
       } finally {
         store.whFormLoading = false;
@@ -1549,7 +1620,7 @@ const actions = {
         name: null, warehouse_name: '',
         company: store.whCompanies[0]?.name || '',
         wt_warehouse_type: 'Slot', parent_warehouse: '', is_group: false,
-        wt_row: 0, wt_col: 0, wt_row_gap: 0, uom_capacities: [],
+        wt_row: 0, wt_col: 0, wt_row_gap: 0, wt_zone_w: 1, wt_zone_d: 1, uom_capacities: [],
       };
     }
     await actions.refreshWhParentOptions();
@@ -1570,7 +1641,7 @@ const actions = {
   },
 
   onWhTypeChange() {
-    store.whForm.is_group = store.whForm.wt_warehouse_type !== 'Bin';
+    store.whForm.is_group = !['Bin','Zone'].includes(store.whForm.wt_warehouse_type);
     store.whForm.parent_warehouse = '';
     actions.refreshWhParentOptions();
   },
@@ -1593,6 +1664,8 @@ const actions = {
       wt_row: store.whForm.wt_row || 0,
       wt_col: store.whForm.wt_col || 0,
       wt_row_gap: store.whForm.wt_row_gap || 0,
+      wt_zone_w: store.whForm.wt_zone_w || 1,
+      wt_zone_d: store.whForm.wt_zone_d || 1,
       uom_capacities: (store.whForm.uom_capacities||[]).filter(r=>r.uom),
     };
     try {
@@ -1701,7 +1774,7 @@ const actions = {
         const firstSlot=byPos[ri][colIdxs[0]];
         return {
           label:`Row ${ri+1}`,
-          cells:colIdxs.map(ci=>({wh:byPos[ri][ci].wh,span:1,aisle:false})),
+          cells:colIdxs.map(ci=>({wh:byPos[ri][ci].wh,span:byPos[ri][ci].kind==='zone'?(byPos[ri][ci].w||1):1,aisle:false})),
           gap:parseFloat(firstSlot.row_gap)||0,
         };
       });
@@ -1785,7 +1858,7 @@ const actions = {
       store.fpRows.forEach((row,ri)=>{
         row.cells.forEach((cell,ci)=>{
           if (cell.wh && !cell.aisle){
-            saves.push(call('save_slot_position',{warehouse:cell.wh,row:ri,col:ci,row_gap:row.gap||0}));
+            saves.push(call('save_slot_position',{warehouse:cell.wh,row:ri,col:ci,row_gap:row.gap||0,span:cell.span||1}));
           }
         });
       });
@@ -2045,7 +2118,7 @@ const DetailPanel = defineComponent({
       <button id="wt-dp-x" @click="actions.closeDP()">✕</button>
       <template v-if="d">
         <div class="wt-dp-title">{{d.slot.label}} — {{d.lv.label}}</div>
-        <div class="wt-dp-sub">{{d.lv.wh}} · {{lp}}% · {{hs?'In stock':'Empty'}}</div>
+        <div class="wt-dp-sub">{{d.lv.wh}} · {{lp}}% · {{hs?'In stock':'Empty'}}<span v-if="d.slot.kind==='zone'"> · floor storage {{d.slot.w||1}}×{{d.slot.d||1}}</span></div>
 
         <span class="wt-dp-sec">UOM fill</span>
         <div v-if="!d.lv.uoms?.length" style="font-size:10px;color:rgba(255,255,255,.3);margin-bottom:8px">No UOMs configured</div>
@@ -2067,9 +2140,9 @@ const DetailPanel = defineComponent({
           <div class="wt-dp-iqty">{{fmt(it.a)}}</div>
         </div>
 
-        <div class="wt-divider"></div>
-        <span class="wt-dp-sec">All levels — {{d.slot.label}}</span>
-        <div v-for="lv2 in d.slot.levels" :key="lv2.wh"
+        <div class="wt-divider" v-if="d.slot.kind!=='zone'"></div>
+        <span class="wt-dp-sec" v-if="d.slot.kind!=='zone'">All levels — {{d.slot.label}}</span>
+        <div v-for="lv2 in (d.slot.kind==='zone'?[]:d.slot.levels)" :key="lv2.wh"
           :class="['wt-dp-lv', lvKey(d.slot,lv2)===store.selKey?'sel':'']"
           @click="actions.clickLv(d.slot.wh, lv2.wh)">
           <div class="wt-dp-lv-hdr">
@@ -2090,7 +2163,8 @@ const DetailPanel = defineComponent({
 
         <component v-for="c in ext.panelSections" :is="c" :key="c.name" :d="d"/>
 
-        <button v-if="store.canEdit" class="wt-cfg-btn" @click="actions.openCfg(d.slot.wh)">⚙ Configure stack levels</button>
+        <button v-if="store.canEdit && d.slot.kind!=='zone'" class="wt-cfg-btn" @click="actions.openCfg(d.slot.wh)">⚙ Configure stack levels</button>
+        <button v-if="store.canEdit && d.slot.kind==='zone'" class="wt-cfg-btn" @click="actions.openWhForm('edit', d.slot.wh)">⚙ Edit floor area</button>
       </template>
     </div>
   `,
@@ -2202,7 +2276,7 @@ const ConfigModal = defineComponent({
         <div class="wt-cfg-body">
           <template v-if="!store.cfgSlot">
             <span class="wt-cfg-slabel">Select a slot to configure</span>
-            <div v-for="sl in store.slots" :key="sl.wh" class="wt-slot-pick" @click="actions.openCfg(sl.wh)">
+            <div v-for="sl in store.slots.filter(x=>x.kind!=='zone')" :key="sl.wh" class="wt-slot-pick" @click="actions.openCfg(sl.wh)">
               <div class="wt-slot-pick-name">{{sl.label}}</div>
               <div class="wt-slot-pick-meta">{{sl.levels.length}} levels</div>
             </div>
@@ -2340,8 +2414,10 @@ const WarehouseFormModal = defineComponent({
                 <option value="Floor">Floor</option>
                 <option value="Slot">Slot</option>
                 <option value="Bin">Bin</option>
+                <option value="Zone">Zone (floor storage)</option>
               </select>
-              <span class="wt-whform-hint" v-if="!store.whFormLockType">Role of this warehouse in the 3D view</span>
+              <span class="wt-whform-hint" v-if="!store.whFormLockType && store.whForm.wt_warehouse_type==='Zone'">An area of the floor where stock is stacked without racks. Holds stock itself; put it under a Floor, or leave the parent empty to show it as its own floor.</span>
+              <span class="wt-whform-hint" v-else-if="!store.whFormLockType">Role of this warehouse in the 3D view</span>
               <span class="wt-whform-hint" v-else>Adding a level (Bin) to this slot</span>
             </div>
 
@@ -2356,12 +2432,12 @@ const WarehouseFormModal = defineComponent({
               </span>
             </div>
 
-            <label class="wt-whform-check" v-if="store.whForm.wt_warehouse_type!=='Bin'">
+            <label class="wt-whform-check" v-if="!['Bin','Zone'].includes(store.whForm.wt_warehouse_type)">
               <input type="checkbox" v-model="store.whForm.is_group"/>
               Is Group Warehouse
             </label>
 
-            <template v-if="store.whForm.wt_warehouse_type==='Slot'">
+            <template v-if="['Slot','Zone'].includes(store.whForm.wt_warehouse_type)">
               <div class="wt-whform-row2">
                 <div class="wt-whform-field">
                   <label>WT Row</label>
@@ -2377,9 +2453,19 @@ const WarehouseFormModal = defineComponent({
                 <input type="number" step="0.1" v-model.number="store.whForm.wt_row_gap"/>
                 <span class="wt-whform-hint">Extra spacing after this row in the 3D floor view</span>
               </div>
+              <div class="wt-whform-row2" v-if="store.whForm.wt_warehouse_type==='Zone'">
+                <div class="wt-whform-field">
+                  <label>Width (grid columns)</label>
+                  <input type="number" min="1" v-model.number="store.whForm.wt_zone_w"/>
+                </div>
+                <div class="wt-whform-field">
+                  <label>Depth (grid rows)</label>
+                  <input type="number" min="1" v-model.number="store.whForm.wt_zone_d"/>
+                </div>
+              </div>
             </template>
 
-            <div class="wt-whform-field" v-if="store.whForm.wt_warehouse_type==='Bin'">
+            <div class="wt-whform-field" v-if="['Bin','Zone'].includes(store.whForm.wt_warehouse_type)">
               <label>WT UOM Capacities</label>
               <div v-for="(row,i) in store.whForm.uom_capacities" :key="i" class="wt-whform-uom-row">
                 <select v-model="row.uom">
@@ -2536,7 +2622,11 @@ const View2D = defineComponent({
   name: 'View2D',
   setup(){
     const sections = computed(()=>{
-      const slots=filteredSlots();
+      const all=filteredSlots();
+      // Racks are grouped by name prefix (A1, A2 → "A"). Floor zones are one area of
+      // the godown, so they get a single section laid out in their real grid positions.
+      const slots=all.filter(sl=>sl.kind!=='zone');
+      const zones=all.filter(sl=>sl.kind==='zone');
       const secMap={}, secOrder=[];
       slots.forEach(sl=>{
         const nm=(sl.label||sl.wh).replace(/\s*-\s*[A-Z]{1,8}$/,'').split('/').pop().trim();
@@ -2546,17 +2636,28 @@ const View2D = defineComponent({
       });
       secOrder.sort((a,b)=>a.localeCompare(b));
       secOrder.forEach(key=>{if(secMap[key])secMap[key].sort((a,b)=>a.shortName.localeCompare(b.shortName));});
-      return secOrder.map(key=>{
-        const tiles=secMap[key];
-        const cols=tiles.length<=1?1:tiles.length<=4?2:3;
-        const occ=tiles.filter(s=>hasStock(s)).length;
-        const pct=tiles.length?Math.round((occ/tiles.length)*100):0;
-        const cntCls=pct>=80?'red':pct>=50?'org':'grn';
-        const avgFp=tiles.length?Math.round(tiles.reduce((s,t)=>s+slotFill(t),0)/tiles.length):0;
-        const barClr=avgFp>0?FCH(avgFp):'var(--wt-border)';
-        return {key,tiles,cols,occ,cntCls,avgFp,barClr};
-      });
+      const out=secOrder.map(key=>sectionOf(key, secMap[key], {}));
+      if (zones.length){
+        const r0=Math.min(...zones.map(z=>z.row)), c0=Math.min(...zones.map(z=>z.col));
+        const gridCols=Math.max(...zones.map(z=>z.col-c0+(z.w||1)));
+        const tiles=zones.map(z=>({...z, shortName:(z.label||z.wh).replace(/\s*-\s*[A-Z]{1,8}$/,'').trim(),
+          gridArea:`${z.row-r0+1} / ${z.col-c0+1} / span ${z.d||1} / span ${z.w||1}`}));
+        // A godown with only floor storage is titled by its own name; on a floor that
+        // also has racks, the zones are labelled as the floor-storage part.
+        const name=!slots.length && store.curGrp ? store.curGrp.name : 'Floor storage';
+        out.push(sectionOf(name, tiles, {zone:true, gridCols}));
+      }
+      return out;
     });
+    function sectionOf(key, tiles, extra){
+      const cols=tiles.length<=1?1:tiles.length<=4?2:3;
+      const occ=tiles.filter(s=>hasStock(s)).length;
+      const pct=tiles.length?Math.round((occ/tiles.length)*100):0;
+      const cntCls=pct>=80?'red':pct>=50?'org':'grn';
+      const avgFp=tiles.length?Math.round(tiles.reduce((s,t)=>s+slotFill(t),0)/tiles.length):0;
+      const barClr=avgFp>0?FCH(avgFp):'var(--wt-border)';
+      return {key,tiles,cols,occ,cntCls,avgFp,barClr,...extra};
+    }
 
     function tileCls(sl){
       if (hooks.slotColor) return hooks.slotColor(sl) ? '' : 'empty';
@@ -2584,7 +2685,7 @@ const View2D = defineComponent({
     <div id="wt-view2d" :style="{display:store.curView==='2d'?'block':'none'}">
       <div class="wt-2d-wrap">
         <template v-if="sections.length">
-          <div v-for="sec in sections" :key="sec.key" class="wt-2d-sec">
+          <div v-for="sec in sections" :key="sec.key" :class="['wt-2d-sec', sec.zone?'wt-2d-sec-zone':'']">
             <div class="wt-2d-sec-hdr">
               <div class="wt-2d-sec-name">{{sec.key}}</div>
               <div :class="['wt-2d-sec-cnt', sec.cntCls]">{{sec.occ}}/{{sec.tiles.length}}</div>
@@ -2592,14 +2693,15 @@ const View2D = defineComponent({
             <div class="wt-2d-sec-cap">
               <div class="wt-2d-sec-cap-fill" :style="{width:sec.avgFp+'%',background:sec.barClr}"></div>
             </div>
-            <div class="wt-2d-slots" :style="{'grid-template-columns':'repeat('+sec.cols+',1fr)'}">
+            <div class="wt-2d-slots" :style="{'grid-template-columns':'repeat('+(sec.zone?sec.gridCols:sec.cols)+',1fr)'}">
               <div v-for="(sl,ti) in sec.tiles" :key="sl.wh"
-                :class="['wt-2d-tile', tileCls(sl)]"
+                :class="['wt-2d-tile', tileCls(sl), sl.kind==='zone'?'zone':'']"
                 :data-slot="sl.wh"
-                :style="tileStyle(sl, ti)"
+                :style="sec.zone ? {...tileStyle(sl, ti), gridArea: sl.gridArea} : tileStyle(sl, ti)"
                 :title="sl.wh+(tileQty(sl)>0?'\\nQty: '+fmt(tileQty(sl)):'\\nEmpty')"
                 @click="actions.open2DModal(sl.wh)">
                 <div class="wt-2d-tile-name">{{sl.shortName}}</div>
+                <div v-if="sl.kind==='zone'" class="wt-2d-zone-tag">floor {{sl.w||1}}×{{sl.d||1}}</div>
                 <div class="wt-2d-tile-qty">{{tileQty(sl)>0?fmtK(tileQty(sl)):'—'}}</div>
                 <div v-if="sl.levels && sl.levels.length>1" class="wt-2d-levels">
                   <div v-for="lv in [...sl.levels].reverse()" :key="lv.wh"
@@ -2753,7 +2855,7 @@ const SetupWizard = defineComponent({
   name: 'SetupWizard',
   setup(){
     onMounted(()=>{ if (!store.setupScan) actions.runScan(); });
-    const roleIcon = { Building:'🏢', Floor:'🗂️', Slot:'📦', Bin:'🧱' };
+    const roleIcon = { Building:'🏢', Floor:'🗂️', Slot:'📦', Bin:'🧱', Zone:'🟫' };
     return { store, actions, roleIcon };
   },
   template: `
@@ -2798,7 +2900,7 @@ const SetupWizard = defineComponent({
           <div class="wt-setup-sub">We found your existing warehouse tree below. Assign a role to each depth — no warehouses will be renamed or moved.</div>
           <div class="wt-setup-hint">
             <span>ℹ️</span>
-            <span>Pick the levels that represent physical storage. Choose "Skip level" for any depth that doesn't apply — for example a level used only for accounting grouping.</span>
+            <span>Pick the levels that represent physical storage. Choose "Skip level" for any depth that doesn't apply — for example a level used only for accounting grouping. Godowns without racks are handled automatically: any warehouse that holds stock with no shelves under it becomes a floor zone.</span>
           </div>
 
           <div v-for="d in store.setupScan.depths" :key="d.depth" class="wt-setup-row" :style="{marginLeft:(Math.min(d.depth-1,4)*16)+'px'}">
@@ -2830,7 +2932,7 @@ const SetupWizard = defineComponent({
           <div class="wt-setup-h3">You're all set</div>
           <div class="wt-setup-sub">Your warehouse hierarchy has been mapped. Here's what we configured:</div>
 
-          <div class="wt-setup-summary-grid">
+          <div class="wt-setup-summary-grid" :style="store.setupSummary?.Zone ? {gridTemplateColumns:'repeat(5,1fr)'} : null">
             <div class="wt-setup-stat">
               <div class="wt-setup-stat-val">{{store.setupSummary?.Building || 0}}</div>
               <div class="wt-setup-stat-lbl">Buildings</div>
@@ -2847,6 +2949,14 @@ const SetupWizard = defineComponent({
               <div class="wt-setup-stat-val">{{store.setupSummary?.Bin || 0}}</div>
               <div class="wt-setup-stat-lbl">Bins</div>
             </div>
+            <div class="wt-setup-stat" v-if="store.setupSummary?.Zone">
+              <div class="wt-setup-stat-val">{{store.setupSummary.Zone}}</div>
+              <div class="wt-setup-stat-lbl">Floor zones</div>
+            </div>
+          </div>
+          <div class="wt-setup-hint" v-if="store.setupSummary?.Zone">
+            <span>🟫</span>
+            <span>{{store.setupSummary.Zone}} warehouse{{store.setupSummary.Zone===1?' holds':'s hold'}} stock with no shelves under {{store.setupSummary.Zone===1?'it':'them'}}, so {{store.setupSummary.Zone===1?'it is':'they are'}} shown as floor storage. Set each area's size and position in "Edit floor plan" or "Manage warehouses".</span>
           </div>
 
           <div class="wt-setup-hint">

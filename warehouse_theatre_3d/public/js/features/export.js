@@ -48,8 +48,10 @@ WarehouseTheatre3D.register(core => {
   function drawPlan() {
     const slots = store.slots;
     const CW = 132, CH = 30 + 18 * Math.max(1, ...slots.map(s => s.levels.length)), PAD = 40, GAPX = 14, GAPY = 16, HEAD = 92;
-    const rows = [...new Set(slots.map(s => s.row))].sort((a, b) => a - b);
-    const cols = Math.max(0, ...slots.map(s => s.col)) + 1;
+    // Every row a slot or zone occupies (zones can span several rows).
+    const rows = [...new Set(slots.flatMap(s => Array.from({ length: s.kind === 'zone' ? Math.max(1, s.d || 1) : 1 }, (_, i) => s.row + i)))]
+      .sort((a, b) => a - b);
+    const cols = Math.max(1, ...slots.map(s => s.col + (s.kind === 'zone' ? (s.w || 1) : 1)));
     const rowY = {};
     let y = HEAD;
     rows.forEach(r => {
@@ -73,6 +75,7 @@ WarehouseTheatre3D.register(core => {
 
     slots.forEach(sl => {
       const x = PAD + sl.col * (CW + GAPX), y0 = rowY[sl.row];
+      if (sl.kind === 'zone') { drawZone(g, sl, x, y0, rowY, CW, CH, GAPX, dock); return; }
       g.fillStyle = '#f7fafc'; g.strokeStyle = sl.wh === dock ? '#2563eb' : '#cbd5e0'; g.lineWidth = sl.wh === dock ? 2.5 : 1;
       g.beginPath(); g.roundRect ? g.roundRect(x, y0, CW, CH, 8) : g.rect(x, y0, CW, CH); g.fill(); g.stroke();
       g.fillStyle = '#1a202c'; g.font = 'bold 12px -apple-system,Inter,Arial,sans-serif';
@@ -99,6 +102,32 @@ WarehouseTheatre3D.register(core => {
       lx += 26 + g.measureText(l.label).width;
     });
     return { canvas: c, W, H };
+  }
+
+  /* Floor zone on the plan: a hatched area spanning its grid cells, with fill and quantity. */
+  function drawZone(g, sl, x, y0, rowY, CW, CH, GAPX, dock) {
+    const w = Math.max(1, sl.w || 1), d = Math.max(1, sl.d || 1);
+    const lastRow = sl.row + d - 1;
+    const W = w * CW + (w - 1) * GAPX;
+    const H = (rowY[lastRow] !== undefined ? rowY[lastRow] : y0 + (d - 1) * (CH + 16)) + CH - y0;
+    const lv = sl.levels[0];
+    const col = levelColorCss(lv, sl) || '#e2e8f0';
+    g.save();
+    g.fillStyle = '#fffbeb'; g.fillRect(x, y0, W, H);
+    g.beginPath(); g.rect(x, y0, W, H); g.clip();
+    g.strokeStyle = col; g.globalAlpha = .55; g.lineWidth = 6;
+    for (let k = -H; k < W; k += 16) { g.beginPath(); g.moveTo(x + k, y0 + H); g.lineTo(x + k + H, y0); g.stroke(); }
+    g.restore();
+    g.setLineDash([6, 4]); g.strokeStyle = sl.wh === dock ? '#2563eb' : '#d97706'; g.lineWidth = sl.wh === dock ? 2.5 : 1.5;
+    g.strokeRect(x, y0, W, H); g.setLineDash([]);
+    g.fillStyle = 'rgba(255,255,255,.88)'; g.fillRect(x + 4, y0 + 4, Math.min(W - 8, 150), Math.min(H - 8, 48));
+    g.fillStyle = '#1a202c'; g.font = 'bold 12px -apple-system,Inter,Arial,sans-serif';
+    g.fillText(sl.label + (sl.wh === dock ? '  (dock)' : ''), x + 8, y0 + 17);
+    g.font = '10px -apple-system,Inter,Arial,sans-serif'; g.fillStyle = '#92400e';
+    g.fillText('Floor storage', x + 8, y0 + 31);
+    const q = (lv.uoms || []).reduce((s, u) => s + (u.qty || 0), 0);
+    g.fillStyle = '#4a5568';
+    g.fillText(q ? fmtK(q) + ((lv.uoms || []).some(u => u.cap > 0) ? ` · ${lvFill(lv)}%` : '') : 'Empty', x + 8, y0 + 45);
   }
 
   function loadJsPDF() {

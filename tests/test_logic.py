@@ -60,6 +60,7 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.insights import (  # noqa: E4
 )
 from warehouse_theatre_3d.warehouse_theatre_3d.api.operations import plan_putaway  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.routes import reorder_rows  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.setup import refine_roles  # noqa: E402
 
 
 class TestFillPercent(unittest.TestCase):
@@ -145,6 +146,46 @@ class TestReorder(unittest.TestCase):
 	def test_given_order_first_then_rest(self):
 		rows = [{"name": "r1", "idx": 1}, {"name": "r2", "idx": 2}, {"name": "r3", "idx": 3}]
 		self.assertEqual(reorder_rows(rows, ["r3", "r1", "ghost"]), {"r3": 1, "r1": 2, "r2": 3})
+
+
+def _wh(name, parent=None, group=0):
+	return {"name": name, "parent_warehouse": parent, "is_group": group}
+
+
+class TestZoneDetection(unittest.TestCase):
+	"""refine_roles: floor storage becomes Zone without touching racked branches."""
+
+	def test_racked_branch_unchanged(self):
+		whs = [_wh("B", None, 1), _wh("F", "B", 1), _wh("S", "F", 1), _wh("L1", "S")]
+		roles = {"B": "Building", "F": "Floor", "S": "Slot", "L1": "Bin"}
+		self.assertEqual(refine_roles(whs, roles), roles)
+
+	def test_godown_with_areas_areas_become_zones(self):
+		# Godown (Floor depth) split into areas at the Slot depth, no shelves under them
+		whs = [_wh("B", None, 1), _wh("G", "B", 1), _wh("Area 1", "G"), _wh("Near Gate", "G")]
+		out = refine_roles(whs, {"B": "Building", "G": "Floor", "Area 1": "Slot", "Near Gate": "Slot"})
+		self.assertEqual((out["G"], out["Area 1"], out["Near Gate"]), ("Floor", "Zone", "Zone"))
+
+	def test_single_warehouse_godown_becomes_standalone_zone(self):
+		whs = [_wh("B", None, 1), _wh("Fabric Godown", "B")]
+		out = refine_roles(whs, {"B": "Building", "Fabric Godown": "Floor"})
+		self.assertEqual(out["Fabric Godown"], "Zone")
+
+	def test_mixed_floor_racks_stay_and_floor_area_becomes_zone(self):
+		whs = [_wh("F", None, 1), _wh("Rack A", "F", 1), _wh("A-L1", "Rack A"), _wh("Bulk area", "F")]
+		out = refine_roles(whs, {"F": "Floor", "Rack A": "Slot", "A-L1": "Bin", "Bulk area": "Slot"})
+		self.assertEqual((out["Rack A"], out["A-L1"], out["Bulk area"]), ("Slot", "Bin", "Zone"))
+
+	def test_flat_two_level_tree_godowns_become_zones(self):
+		# Wizard seeds Slot/Bin for a 2-level tree; without refinement nothing would show.
+		whs = [_wh("All Warehouses", None, 1), _wh("Yarn Godown", "All Warehouses"), _wh("Stores", "All Warehouses")]
+		out = refine_roles(whs, {"All Warehouses": "Slot", "Yarn Godown": "Bin", "Stores": "Bin"})
+		self.assertEqual((out["Yarn Godown"], out["Stores"]), ("Zone", "Zone"))
+
+	def test_empty_group_is_not_a_zone(self):
+		# A group warehouse can't hold stock in ERPNext, even with no children yet
+		out = refine_roles([_wh("F", None, 1), _wh("New rack", "F", 1)], {"F": "Floor", "New rack": "Slot"})
+		self.assertEqual(out["New rack"], "Slot")
 
 
 if __name__ == "__main__":

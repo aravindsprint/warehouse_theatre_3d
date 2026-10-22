@@ -258,8 +258,9 @@ select.wtf-inp{padding:0 5px}
       );
       beam.position.set(p.x, (p.top + 2.4) / 2, p.z);
       grp.add(beam);
+      const r0 = p.kind === 'zone' ? Math.max(p.halfW, p.halfD) + .15 : 1.25;
       const ring = new THREE.Mesh(
-        new THREE.RingGeometry(1.25, 1.45, 40),
+        new THREE.RingGeometry(r0, r0 + .2, 48),
         new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .75, side: THREE.DoubleSide, depthWrite: false })
       );
       ring.rotation.x = -Math.PI / 2;
@@ -267,11 +268,13 @@ select.wtf-inp{padding:0 5px}
       ring.userData.pulse = { base: 1, amp: .18, speed: 3, phase: drawn * .7 };
       grp.add(ring);
       if (t.level !== null && t.level !== undefined && p.levelY[t.level] !== undefined) {
+        // Rack: outline the shelf level. Floor zone: outline the whole area up to the pile top.
+        const zone = p.kind === 'zone';
         const box = new THREE.Mesh(
-          new THREE.BoxGeometry(2.3, .96, 2.3),
+          zone ? new THREE.BoxGeometry(p.halfW * 2 + .1, p.top + .1, p.halfD * 2 + .1) : new THREE.BoxGeometry(2.3, .96, 2.3),
           new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: .9 })
         );
-        box.position.set(p.x, p.levelY[t.level], p.z);
+        box.position.set(p.x, zone ? (p.top + .1) / 2 : p.levelY[t.level], p.z);
         box.userData.pulse = { base: 1, amp: .04, speed: 4, phase: drawn };
         grp.add(box);
       }

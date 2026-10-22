@@ -40,6 +40,7 @@ No relabeling required. A one-time setup wizard reads the warehouse hierarchy yo
 | **Export** | 3D view as PNG, printable floor plan as PNG or A4 PDF, bin list as CSV — in whatever colouring is active |
 | **Capacity alerts** | Toolbar badge for bins over the limit across all floors, plus an optional daily email (Warehouse Theatre Settings) |
 | **Company switcher** | Filter floors by company on multi-company sites |
+| **Floor storage (zones)** | Godowns without racks: areas of the floor drawn as stacked bales by fill %, spanning several grid cells. Works for a godown split into area warehouses, a godown kept as one warehouse, and floors that mix racks and floor areas |
 
 ---
 
@@ -55,6 +56,17 @@ Depth 2 (e.g. "Ground Floor")      →  Floor
 Depth 3 (e.g. "A1", "A2", "B1")    →  Slot       (renders as a rack)
 Depth 4 (e.g. "L1", "L2", "L3")    →  Bin        (renders as a shelf level)
 ```
+
+**Godowns without racks** use a fifth role, **Zone**: an area of the floor where stock is stacked. Setup assigns it automatically to any warehouse that holds stock with no shelves under it:
+
+```
+Fabric Godown (Floor)            Yarn Godown (single warehouse)
+ ├─ Area 1      → Zone            → Zone, shown as its own floor
+ ├─ Near Gate   → Zone
+ └─ Rack A      → Slot → Bins     (racks and zones can share a floor)
+```
+
+Set each zone's size (grid columns × rows) in **Manage warehouses**, or by its cell span in **Edit floor plan**, and give it a UOM capacity so its fill % and pile height mean something.
 
 If your tree is only 3 levels deep, skip Building. If a level doesn't map cleanly, mark it "Skip" — the wizard handles uneven trees by letting you review every depth before committing.
 
