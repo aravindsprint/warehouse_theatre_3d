@@ -1,0 +1,35 @@
+{%- raw -%}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>Warehouse Scan</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/warehouse_theatre_3d/images/favicon.svg"/>
+  <link rel="manifest" href="/assets/warehouse_theatre_3d/scan-manifest.json"/>
+  <meta name="theme-color" content="#2563eb"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-title" content="Warehouse Scan"/>
+  <link rel="apple-touch-icon" href="/assets/warehouse_theatre_3d/icons/apple-touch-icon.png"/>
+  <link rel="stylesheet" href="/assets/warehouse_theatre_3d/css/wt-scan.css?v=1"/>
+</head>
+<body>
+  <div id="wt-scan-root"></div>
+{%- endraw %}
+  <script>window.csrf_token = "{{ csrf_token }}";</script>
+{%- raw %}
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/assets/warehouse_theatre_3d/sw.js', {scope:'/'})
+        .catch(e => console.warn('SW:', e));
+    }
+  </script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="/assets/warehouse_theatre_3d/js/scan/wt-scan.js?v=1"></script>
+  <script>
+    if (window.WarehouseScan) window.WarehouseScan.mount('#wt-scan-root');
+  </script>
+</body>
+</html>
+{%- endraw -%}

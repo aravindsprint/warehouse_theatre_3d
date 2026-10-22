@@ -63,9 +63,11 @@ test('draft Stock Entry: map button only; submitted: putaway too', () => {
   assert.equal(env.opened[0], '/warehouse-theatre-3d?doc=Stock+Entry&name=STE-1');
   const sub = form('Stock Entry', { name: 'STE-2', docstatus: 1 });
   refresh(env, sub);
-  assert.deepEqual(sub.buttons.map(b => b.label), ['Show on warehouse map', 'Suggest putaway bins']);
+  assert.deepEqual(sub.buttons.map(b => b.label), ['Show on warehouse map', 'Suggest putaway bins', 'Put away with scanner']);
   sub.buttons[1].fn();
   assert.equal(env.opened[1], '/warehouse-theatre-3d?putaway=Stock+Entry&name=STE-2');
+  sub.buttons[2].fn();
+  assert.equal(env.opened[2], '/warehouse-scan?putaway=Stock+Entry&name=STE-2');
 });
 
 test('Pick List gets the route button', () => {
@@ -75,6 +77,11 @@ test('Pick List gets the route button', () => {
   const route = f.buttons.find(b => b.label === 'Optimise pick route');
   route.fn();
   assert.equal(env.opened[0], '/warehouse-theatre-3d?route=PICK-1');
+  f.buttons.find(b => b.label === 'Pick with scanner').fn();
+  assert.equal(env.opened[1], '/warehouse-scan?pick=PICK-1');
+  const done = form('Pick List', { name: 'PICK-2', docstatus: 1 });
+  refresh(env, done);
+  assert.ok(!done.buttons.some(b => b.label === 'Pick with scanner'));
 });
 
 test('invoices only when they update stock; new documents never', () => {
@@ -127,4 +134,9 @@ test('non-stock Items and unmapped Warehouses get no button', () => {
   refresh(env, bin);
   bin.buttons[0].fn();
   assert.equal(env.opened[0], '/warehouse-theatre-3d?focus=A3-L1+-+PD');
+  bin.buttons[1].fn();
+  assert.equal(env.opened[1], '/warehouse-scan?count=A3-L1+-+PD');
+  const rack = form('Warehouse', { name: 'A3 - PD', wt_warehouse_type: 'Slot' });
+  refresh(env, rack);
+  assert.deepEqual(rack.buttons.map(b => b.label), ['Open in 3D view']);
 });

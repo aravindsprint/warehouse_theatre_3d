@@ -129,5 +129,9 @@ def reorder_pick_list(name, order):
 	for r in doc.locations:
 		r.idx = new_idx[r.name]
 	doc.locations.sort(key=lambda r: r.idx)
+	# Otherwise saving rebuilds the lines from stock (ERPNext's "Pick Manually" off) and the
+	# new order is lost.
+	if doc.meta.has_field("pick_manually"):
+		doc.pick_manually = 1
 	doc.save()
 	return {"ok": True, "name": doc.name}

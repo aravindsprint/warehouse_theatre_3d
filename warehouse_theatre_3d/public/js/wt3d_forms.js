@@ -7,6 +7,7 @@
 
 	const ROLES = ['System Manager', 'Stock Manager', 'Stock User'];
 	const APP = '/warehouse-theatre-3d';
+	const SCAN = '/warehouse-scan';
 	const API = 'warehouse_theatre_3d.warehouse_theatre_3d.api.links.';
 	const GROUP = __('Warehouse map');
 
@@ -25,15 +26,25 @@
 		window.open(APP + '?' + new URLSearchParams(params).toString(), '_blank', 'noopener');
 	}
 
+	// The phone app (/warehouse-scan): opened here too, so a desk user can start a job
+	// or copy the link to a phone.
+	function openScan(params) {
+		window.open(SCAN + '?' + new URLSearchParams(params).toString(), '_blank', 'noopener');
+	}
+
 	function docButtons(frm) {
 		if (frm.is_new() || !allowed()) return;
 		if (UPDATE_STOCK.includes(frm.doctype) && !frm.doc.update_stock) return;
 		frm.add_custom_button(__('Show on warehouse map'), () => openMap({ doc: frm.doctype, name: frm.doc.name }), GROUP);
 		if (RECEIVING.includes(frm.doctype) && frm.doc.docstatus === 1) {
 			frm.add_custom_button(__('Suggest putaway bins'), () => openMap({ putaway: frm.doctype, name: frm.doc.name }), GROUP);
+			frm.add_custom_button(__('Put away with scanner'), () => openScan({ putaway: frm.doctype, name: frm.doc.name }), GROUP);
 		}
 		if (frm.doctype === 'Pick List' && frm.doc.docstatus < 2) {
 			frm.add_custom_button(__('Optimise pick route'), () => openMap({ route: frm.doc.name }), GROUP);
+		}
+		if (frm.doctype === 'Pick List' && frm.doc.docstatus === 0) {
+			frm.add_custom_button(__('Pick with scanner'), () => openScan({ pick: frm.doc.name }), GROUP);
 		}
 	}
 
@@ -93,6 +104,9 @@
 		refresh(frm) {
 			if (frm.is_new() || !frm.doc.wt_warehouse_type || !allowed()) return;
 			frm.add_custom_button(__('Open in 3D view'), () => openMap({ focus: frm.doc.name }), GROUP);
+			if (['Bin', 'Zone'].includes(frm.doc.wt_warehouse_type)) {
+				frm.add_custom_button(__('Count with scanner'), () => openScan({ count: frm.doc.name }), GROUP);
+			}
 		},
 	});
 })();

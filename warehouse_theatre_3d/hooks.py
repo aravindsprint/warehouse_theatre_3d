@@ -6,7 +6,7 @@ app_publisher   = "Aravind G"
 app_description = "Free 3D & 2D warehouse storage visualization for any ERPNext warehouse hierarchy"
 app_email       = "aravindsprint@gmail.com"
 app_license     = "MIT"
-app_version     = "0.5.0"
+app_version     = "0.6.0"
 
 add_to_apps_screen = [
     {
@@ -15,7 +15,14 @@ add_to_apps_screen = [
         "title": "Warehouse Theatre 3D",
         "route": "/warehouse-theatre-3d",
         "has_permission": "warehouse_theatre_3d.warehouse_theatre_3d.api.api.check_app_permission",
-    }
+    },
+    {
+        "name": "warehouse_scan",
+        "logo": "/assets/warehouse_theatre_3d/images/logo.svg",
+        "title": "Warehouse Scan",
+        "route": "/warehouse-scan",
+        "has_permission": "warehouse_theatre_3d.warehouse_theatre_3d.api.api.check_app_permission",
+    },
 ]
 
 website_route_rules = [

@@ -23,6 +23,7 @@ def _install_frappe_stub():
 	frappe.PermissionError = PermissionError
 	frappe.throw = lambda msg, exc=Exception: (_ for _ in ()).throw(exc(msg))
 	frappe.scrub = lambda s: s.lower().replace(" ", "_")
+	frappe._ = lambda s: s
 	frappe.db = types.SimpleNamespace()
 
 	utils = types.ModuleType("frappe.utils")
@@ -38,6 +39,7 @@ def _install_frappe_stub():
 	utils.nowdate = lambda: date.today().isoformat()
 	utils.add_days = lambda d, n: (getdate(d).toordinal() + n) and date.fromordinal(getdate(d).toordinal() + n).isoformat()
 	utils.cint = lambda v: int(v or 0)
+	utils.now_datetime = datetime.now
 	utils.get_url = lambda p="": "https://example.test" + p
 	utils.escape_html = lambda s: s
 	frappe.utils = utils
@@ -62,6 +64,13 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.operations import plan_putawa
 from warehouse_theatre_3d.warehouse_theatre_3d.api.routes import reorder_rows  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.setup import refine_roles  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.links import document_lines, place_of  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.scan import (  # noqa: E402
+	apply_picks,
+	clean_scan,
+	count_queue,
+	place_path,
+	walk_order,
+)
 from warehouse_theatre_3d.warehouse_theatre_3d.api.health import (  # noqa: E402
 	bucket_index,
 	classify_movement,
@@ -254,6 +263,53 @@ class TestFormLinks(unittest.TestCase):
 		sz = place_of({"wh": "Yarn Godown", "wt_type": "Zone", "label": "Yarn Godown"})
 		self.assertEqual((sz["floor"], sz["slot"]), ("Yarn Godown", "Yarn Godown"))
 		self.assertFalse(place_of({"wh": "Stores", "wt_type": None, "label": "Stores"})["mapped"])
+
+
+class TestScan(unittest.TestCase):
+	def test_clean_scan_drops_symbology_prefix_and_line_end(self):
+		self.assertEqual(clean_scan("]C1FAB-005\r\n"), "FAB-005")
+		self.assertEqual(clean_scan("  ]Q1A3-L1 - Ground Floor - PD "), "A3-L1 - Ground Floor - PD")
+		self.assertEqual(clean_scan("FAB-005"), "FAB-005")
+		self.assertEqual(clean_scan(None), "")
+
+	def test_walk_order_snakes_rows_and_puts_unmapped_last(self):
+		stops = [
+			{"key": "a", "idx": 1, "mapped": True, "row": 0, "col": 3, "level": 0},
+			{"key": "b", "idx": 2, "mapped": False},
+			{"key": "c", "idx": 3, "mapped": True, "row": 0, "col": 1, "level": 2},
+			{"key": "d", "idx": 4, "mapped": True, "row": 2, "col": 1, "level": 0},
+			{"key": "e", "idx": 5, "mapped": True, "row": 2, "col": 4, "level": 0},
+			{"key": "f", "idx": 6, "mapped": True, "row": 0, "col": 1, "level": 0},
+		]
+		# Row 0 left to right (lowest shelf first at col 1), row 2 right to left.
+		self.assertEqual(walk_order(stops), ["f", "c", "a", "e", "d", "b"])
+
+	def test_count_queue_never_counted_then_oldest_then_value(self):
+		locs = [
+			{"wh": "A", "items": 2, "value": 10, "last_counted": "2026-09-01"},
+			{"wh": "B", "items": 1, "value": 5, "last_counted": None},
+			{"wh": "C", "items": 0, "value": 0, "last_counted": None},
+			{"wh": "D", "items": 3, "value": 90, "last_counted": None},
+			{"wh": "E", "items": 1, "value": 1, "last_counted": "2026-08-01"},
+		]
+		self.assertEqual(count_queue(locs), ["D", "B", "E", "A"])
+
+	def test_apply_picks_validates(self):
+		rows = [{"name": "r1", "idx": 1, "stock_qty": 10}, {"name": "r2", "idx": 2, "stock_qty": 4}]
+		out = apply_picks(rows, [{"row_name": "r1", "picked_qty": 7}, {"row_name": "r2", "picked_qty": 4, "warehouse": "X"}])
+		self.assertEqual(out["r1"], {"picked_qty": 7.0, "warehouse": None})
+		self.assertEqual(out["r2"]["warehouse"], "X")
+		with self.assertRaises(ValueError):
+			apply_picks(rows, [{"row_name": "r2", "picked_qty": 5}])
+		with self.assertRaises(ValueError):
+			apply_picks(rows, [{"row_name": "zz", "picked_qty": 1}])
+		with self.assertRaises(ValueError):
+			apply_picks(rows, [{"row_name": "r1", "picked_qty": -1}])
+
+	def test_place_path(self):
+		self.assertEqual(place_path({"mapped": True, "slot_label": "A3", "label": "L1"}), "A3 › L1")
+		self.assertEqual(place_path({"mapped": True, "slot_label": "Area 1", "label": "Floor stack"}), "Area 1")
+		self.assertEqual(place_path({"mapped": False, "warehouse": "Stores - PD", "warehouse_label": "Stores"}), "Stores")
 
 
 if __name__ == "__main__":
