@@ -12,6 +12,7 @@
 - Works with the phone camera (built-in barcode reader, or ZXing where the browser has none), hand-held scanners that type and press Enter, or typing. Beeps and vibrates on each scan; installable to the home screen.
 - Picks saved from the scanner turn on the Pick List's *Pick Manually* and *Scan Mode*, so ERPNext keeps the recorded warehouses and doesn't mark skipped lines as fully picked on submit.
 - Fix: saving an optimised order from **Spot the bottleneck** now turns on *Pick Manually*; before, ERPNext could rebuild the lines on save and lose the new order.
+- Proper home-screen icons (PNG 192/512, maskable, and Apple touch icons) for both Warehouse Scan and the 3D app, so both install cleanly on Android and show an icon on iPhone. Warehouse Scan has its own icon and `/apps` tile.
 - New buttons in ERPNext: **Pick with scanner** (draft Pick List), **Put away with scanner** (submitted receipts), **Count with scanner** (mapped Bin/Zone warehouses), and a **Warehouse Scan** tile on `/apps`.
 
 ## v0.5.0 (2026-10-22)

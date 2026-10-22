@@ -18,7 +18,7 @@ add_to_apps_screen = [
     },
     {
         "name": "warehouse_scan",
-        "logo": "/assets/warehouse_theatre_3d/images/logo.svg",
+        "logo": "/assets/warehouse_theatre_3d/images/scan-logo.svg",
         "title": "Warehouse Scan",
         "route": "/warehouse-scan",
         "has_permission": "warehouse_theatre_3d.warehouse_theatre_3d.api.api.check_app_permission",

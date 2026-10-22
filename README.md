@@ -143,7 +143,7 @@ The toolbar under the top bar holds the newer tools. A few things worth knowing:
 
 ## 📱 Warehouse Scan (phone app)
 
-Open **`/warehouse-scan`** on a phone (or the **Warehouse Scan** tile on `/apps`) and add it to the home screen. It works with the phone camera, with hand-held / ring scanners that type the code and press Enter, or by typing.
+Open **`/warehouse-scan`** on a phone (or the **Warehouse Scan** tile on `/apps`) and install it: on Android, Chrome's **⋮ → Install app**; on iPhone, Safari's **Share → Add to Home Screen**. On rugged scanners (Zebra, Honeywell…), install it the same way and set the scanner to keyboard output with Enter after each scan. It works with the phone camera, with hand-held / ring scanners that type the code and press Enter, or by typing.
 
 1. **Print location labels first.** *Print location labels* makes an A4 sheet of QR labels (24 small or 8 large per page) for every shelf and floor area on the floor. Stick one on each. Item barcodes come from the Item's *Barcodes* table; a barcode with a UOM (e.g. a box of 12) counts as that many.
 2. **Put away:** scan a Purchase Receipt, Stock Entry or Subcontracting Receipt (or one item). The app shows the best location for each item; scan that shelf's label and confirm the quantity. *Post* makes one Material Transfer, submitted straight away unless an item needs batch or serial numbers.
