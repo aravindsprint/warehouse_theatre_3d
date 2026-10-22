@@ -61,6 +61,11 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.insights import (  # noqa: E4
 from warehouse_theatre_3d.warehouse_theatre_3d.api.operations import plan_putaway  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.routes import reorder_rows  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.setup import refine_roles  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.health import (  # noqa: E402
+	bucket_index,
+	classify_movement,
+	fifo_layers,
+)
 
 
 class TestFillPercent(unittest.TestCase):
@@ -186,6 +191,42 @@ class TestZoneDetection(unittest.TestCase):
 		# A group warehouse can't hold stock in ERPNext, even with no children yet
 		out = refine_roles([_wh("F", None, 1), _wh("New rack", "F", 1)], {"F": "Floor", "New rack": "Slot"})
 		self.assertEqual(out["New rack"], "Slot")
+
+
+class TestStockHealth(unittest.TestCase):
+	today = date(2026, 10, 22)
+
+	def test_fifo_layers_newest_first_then_uncovered_at_cap(self):
+		rows = [(date(2026, 10, 12), 10), (date(2026, 7, 24), 5)]   # 10 and 90 days old
+		self.assertEqual(fifo_layers(25, rows, self.today, cap_days=730), [(10, 10), (5, 90), (10, 730)])
+
+	def test_fifo_layers_ignore_extra_receipts(self):
+		self.assertEqual(fifo_layers(4, [(date(2026, 10, 21), 10)], self.today), [(4, 1)])
+
+	def test_bucket_edges(self):
+		self.assertEqual([bucket_index(d) for d in (0, 30, 31, 90, 91, 180, 181, 365, 366, 5000)],
+		                 [0, 0, 1, 1, 2, 2, 3, 3, 4, 4])
+
+	def test_dead_and_slow(self):
+		items = {
+			"DEAD": {"qty": 100, "value": 5000},
+			"SLOW": {"qty": 1000, "value": 9000},   # 30 out in 90 days -> 3000 days of cover
+			"FAST": {"qty": 10, "value": 900},      # 90 out in 90 days -> 10 days of cover
+			"EMPTY": {"qty": 0, "value": 0},
+		}
+		moves = {
+			"DEAD": {"last_out": date(2026, 3, 1), "out_qty": 0},
+			"SLOW": {"last_out": date(2026, 10, 1), "out_qty": 30},
+			"FAST": {"last_out": date(2026, 10, 20), "out_qty": 90},
+		}
+		dead, slow = classify_movement(items, moves, 90, self.today)
+		self.assertEqual([r["item_code"] for r in dead], ["DEAD"])
+		self.assertEqual(dead[0]["idle_days"], 235)
+		self.assertEqual([(r["item_code"], r["cover_days"]) for r in slow], [("SLOW", 3000)])
+
+	def test_never_moved_item_is_dead_with_no_last_date(self):
+		dead, _ = classify_movement({"NEW": {"qty": 5, "value": 50}}, {}, 90, self.today)
+		self.assertEqual((dead[0]["item_code"], dead[0]["idle_days"], dead[0]["last_out"]), ("NEW", None, None))
 
 
 if __name__ == "__main__":

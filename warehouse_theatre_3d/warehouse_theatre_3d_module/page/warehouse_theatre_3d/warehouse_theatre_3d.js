@@ -30,7 +30,7 @@ frappe.pages['warehouse-theatre-3d'].on_page_load = function (wrapper) {
 	}
 
 	// Feature modules register themselves with WarehouseTheatre3D before init(); ui.js first.
-	const FEATURES = ['ui', 'heatmap', 'locate', 'stock-actions', 'putaway', 'routing', 'routes', 'timeline', 'export', 'alerts'];
+	const FEATURES = ['ui', 'heatmap', 'locate', 'stock-actions', 'putaway', 'routing', 'routes', 'timeline', 'export', 'alerts', 'health'];
 	const bust = '?v=' + Date.now();
 
 	loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js')

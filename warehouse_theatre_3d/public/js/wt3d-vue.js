@@ -660,6 +660,8 @@ const store = reactive({
   company: '',
   // Set by the timeline feature while store.slots holds a historical snapshot
   replayDate: null,
+  // Before setup: true once the user chooses to run the wizard from a pre-setup page
+  showWizard: false,
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -670,6 +672,9 @@ const store = reactive({
      ext.tools          toolbar buttons {id, icon, label, onClick, active(), show(), badge()}
      ext.panelSections  components rendered in the detail panel, receive prop `d`
      ext.itemActions    per-item buttons in the stock table {icon, label, show(it,d), run(it,d)}
+     ext.views          extra views beside 3D / 2D {id, icon, label, component}
+     ext.preSetup       component shown instead of the setup wizard until the user starts
+                        setup (set store.showWizard = true to open the wizard)
      hooks.lvColor      (lv, slot) => {hex, css} | null   recolours levels in 3D and 2D
      hooks.slotColor    (slot) => {hex, css} | null        recolours whole 2D tiles
      hooks.legend       () => [{color, label}] | null       replaces the fill legend
@@ -678,7 +683,7 @@ const store = reactive({
    store.replayDate is set while the timeline shows historical data in place of live
    stock; features that write stock check it and stay disabled.
 ───────────────────────────────────────────────────────────── */
-const ext = reactive({ overlays: [], tools: [], panelSections: [], itemActions: [] });
+const ext = reactive({ overlays: [], tools: [], panelSections: [], itemActions: [], views: [], preSetup: null });
 const hooks = reactive({ lvColor: null, slotColor: null, legend: null, tooltipLines: null });
 const bus = {
   _h: {},
@@ -1166,6 +1171,13 @@ const actions = {
     try {
       const access = await callSetup('is_setup_complete');
       store.setupComplete = !!access;
+      if (!store.setupComplete) {
+        try {
+          const ua = await call('get_user_access');
+          store.canEdit = !!(ua && ua.can_edit);
+          store.canView = !!(ua && ua.can_view);
+        } catch(e) { /* the wizard handles its own permission errors */ }
+      }
     } catch(e) {
       console.error('WT3D: setup check failed', e);
       store.setupComplete = false;
@@ -1230,6 +1242,8 @@ const actions = {
 
   async finishSetup() {
     store.setupComplete = true;
+    store.showWizard = false;
+    if (!['3d','2d'].includes(store.curView)) store.curView = '3d';
     await actions.loadGroups();
   },
 
@@ -1956,7 +1970,7 @@ const TopBar = defineComponent({
       searchVal.value='';
       actions.clearSearch();
     }
-    return { store, hud, searchVal, onSearch, clearSearch, actions, fmtK };
+    return { store, hud, searchVal, onSearch, clearSearch, actions, fmtK, ext };
   },
   template: `
     <div id="wt-top">
@@ -1965,6 +1979,8 @@ const TopBar = defineComponent({
         <div class="wt-sw-group">
           <button :class="['wt-sw-btn', store.curView==='3d'?'act':'']" @click="actions.setView('3d')">⬡ 3D</button>
           <button :class="['wt-sw-btn', store.curView==='2d'?'act':'']" @click="actions.setView('2d')">⊞ 2D</button>
+          <button v-for="v in ext.views" :key="v.id" :class="['wt-sw-btn', store.curView===v.id?'act':'']"
+            @click="actions.setView(v.id)">{{v.icon}} {{v.label}}</button>
         </div>
         <button class="wt-theme-btn" @click="actions.toggleTheme()">{{store.isDark?'🌙':'☀️'}}</button>
         <button v-if="store.curView==='3d' && !store.aisleMode"
@@ -2014,7 +2030,7 @@ const ToolBar = defineComponent({
     return { store, tools };
   },
   template: `
-    <div id="wt-tools" v-if="tools.length && !store.aisleMode" role="toolbar" aria-label="Warehouse tools">
+    <div id="wt-tools" v-if="tools.length && !store.aisleMode && ['3d','2d'].includes(store.curView)" role="toolbar" aria-label="Warehouse tools">
       <button v-for="t in tools" :key="t.id" :id="'wt-tool-'+t.id"
         :class="['wt-tool', t.active && t.active() ? 'act' : '']"
         :title="t.title || t.label" @click="t.onClick()">
@@ -3021,12 +3037,17 @@ const App = defineComponent({
         </div>
       </template>
       <template v-else-if="!store.setupComplete">
-        <SetupWizard/>
+        <component v-if="ext.preSetup && !store.showWizard" :is="ext.preSetup" :pre-setup="true"/>
+        <SetupWizard v-else/>
+        <Toasts/>
       </template>
       <template v-else>
         <Sidebar/>
         <View3D/>
         <View2D/>
+        <template v-for="v in ext.views" :key="v.id">
+          <component v-if="store.curView===v.id" :is="v.component"/>
+        </template>
         <TopBar/>
         <ToolBar/>
         <BottomBar/>
