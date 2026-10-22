@@ -1,12 +1,15 @@
 /* Warehouse Theatre 3D Service Worker */
-const CACHE_NAME = "warehouse-theatre-3d-v2";
+const CACHE_NAME = "warehouse-theatre-3d-v3";
 
 // Third-party libraries pinned to a version: safe to serve cache-first.
 const LIBS = [
   "https://unpkg.com/vue@3/dist/vue.global.prod.js",
   "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
+  "https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js",
+  "https://unpkg.com/qrcode-generator@1.4.4/qrcode.js",
 ];
-const SHELL = ["/warehouse-theatre-3d", ...LIBS];
+// Precache the pages and the core libraries; the scanner and QR libraries are cached on first use.
+const SHELL = ["/warehouse-theatre-3d", "/warehouse-scan", ...LIBS.slice(0, 2)];
 
 self.addEventListener("install", e => {
   e.waitUntil(
@@ -42,6 +45,7 @@ self.addEventListener("fetch", e => {
   const sameOrigin = url.origin === self.location.origin;
   const ownCode = sameOrigin &&
     (url.pathname === "/warehouse-theatre-3d" || url.pathname.startsWith("/warehouse-theatre-3d/") ||
+     url.pathname === "/warehouse-scan" ||
      url.pathname.startsWith("/assets/warehouse_theatre_3d/"));
   const lib = LIBS.includes(url.href);
   if (!ownCode && !lib) return;

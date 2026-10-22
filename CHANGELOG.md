@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6.0 (2026-10-23)
+
+**Warehouse Scan**: a phone app at `/warehouse-scan` for the people on the floor. Run `bench migrate` after updating (two new Warehouse fields).
+
+- **Put away:** scan a receipt (or one item), go to the suggested location, scan its label, confirm the quantity. Posts one Material Transfer, submitted unless batch/serial numbers are needed.
+- **Pick:** walk a draft Pick List stop by stop in walking order. Scan the shelf, then the items; wrong items and wrong batches are caught; short picks and picking from another shelf are recorded. Save, or save and submit.
+- **Count:** a *Due for counting* list (never counted first, then oldest, then highest value), scan-to-count with pack barcodes, blind count, and a check before posting. Differences go to a draft Stock Reconciliation; the count date is recorded on the location even when nothing differs (new *Last Counted On / By* fields).
+- **Look up:** scan a location to see what's in it, or an item to see where it is.
+- **Location labels:** print QR labels for every shelf and floor area on a floor, 24 or 8 per A4 sheet.
+- Works with the phone camera (built-in barcode reader, or ZXing where the browser has none), hand-held scanners that type and press Enter, or typing. Beeps and vibrates on each scan; installable to the home screen.
+- Picks saved from the scanner turn on the Pick List's *Pick Manually* and *Scan Mode*, so ERPNext keeps the recorded warehouses and doesn't mark skipped lines as fully picked on submit.
+- Fix: saving an optimised order from **Spot the bottleneck** now turns on *Pick Manually*; before, ERPNext could rebuild the lines on save and lose the new order.
+- New buttons in ERPNext: **Pick with scanner** (draft Pick List), **Put away with scanner** (submitted receipts), **Count with scanner** (mapped Bin/Zone warehouses), and a **Warehouse Scan** tile on `/apps`.
+
 ## v0.5.0 (2026-10-22)
 
 **Warehouse map inside ERPNext forms**, so people reach the app from the screens they already work in.
