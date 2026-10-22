@@ -541,7 +541,9 @@ const CSS = `
   #wt-whform-modal{width:calc(100vw - 24px)}
 }
 
-.wt-2d-tile.zone{border-style:dashed}
+.wt-2d-tile.zone{border-style:dashed;min-height:64px;justify-content:center}
+.wt-2d-sec-zone{grid-column:1 / -1}
+@media(max-width:600px){.wt-2d-sec-zone .wt-2d-slots{overflow-x:auto}}
 .wt-2d-zone-tag{font-size:8px;font-weight:700;color:#d97706;letter-spacing:.3px;text-transform:uppercase;margin-top:1px}
 #wt-app.dark .wt-2d-zone-tag{color:#fbbf24}
 .wt-tt-extra{font-size:9px;color:var(--wt-text2);margin-top:5px;line-height:1.4}
@@ -2620,7 +2622,11 @@ const View2D = defineComponent({
   name: 'View2D',
   setup(){
     const sections = computed(()=>{
-      const slots=filteredSlots();
+      const all=filteredSlots();
+      // Racks are grouped by name prefix (A1, A2 → "A"). Floor zones are one area of
+      // the godown, so they get a single section laid out in their real grid positions.
+      const slots=all.filter(sl=>sl.kind!=='zone');
+      const zones=all.filter(sl=>sl.kind==='zone');
       const secMap={}, secOrder=[];
       slots.forEach(sl=>{
         const nm=(sl.label||sl.wh).replace(/\s*-\s*[A-Z]{1,8}$/,'').split('/').pop().trim();
@@ -2630,17 +2636,28 @@ const View2D = defineComponent({
       });
       secOrder.sort((a,b)=>a.localeCompare(b));
       secOrder.forEach(key=>{if(secMap[key])secMap[key].sort((a,b)=>a.shortName.localeCompare(b.shortName));});
-      return secOrder.map(key=>{
-        const tiles=secMap[key];
-        const cols=tiles.length<=1?1:tiles.length<=4?2:3;
-        const occ=tiles.filter(s=>hasStock(s)).length;
-        const pct=tiles.length?Math.round((occ/tiles.length)*100):0;
-        const cntCls=pct>=80?'red':pct>=50?'org':'grn';
-        const avgFp=tiles.length?Math.round(tiles.reduce((s,t)=>s+slotFill(t),0)/tiles.length):0;
-        const barClr=avgFp>0?FCH(avgFp):'var(--wt-border)';
-        return {key,tiles,cols,occ,cntCls,avgFp,barClr};
-      });
+      const out=secOrder.map(key=>sectionOf(key, secMap[key], {}));
+      if (zones.length){
+        const r0=Math.min(...zones.map(z=>z.row)), c0=Math.min(...zones.map(z=>z.col));
+        const gridCols=Math.max(...zones.map(z=>z.col-c0+(z.w||1)));
+        const tiles=zones.map(z=>({...z, shortName:(z.label||z.wh).replace(/\s*-\s*[A-Z]{1,8}$/,'').trim(),
+          gridArea:`${z.row-r0+1} / ${z.col-c0+1} / span ${z.d||1} / span ${z.w||1}`}));
+        // A godown with only floor storage is titled by its own name; on a floor that
+        // also has racks, the zones are labelled as the floor-storage part.
+        const name=!slots.length && store.curGrp ? store.curGrp.name : 'Floor storage';
+        out.push(sectionOf(name, tiles, {zone:true, gridCols}));
+      }
+      return out;
     });
+    function sectionOf(key, tiles, extra){
+      const cols=tiles.length<=1?1:tiles.length<=4?2:3;
+      const occ=tiles.filter(s=>hasStock(s)).length;
+      const pct=tiles.length?Math.round((occ/tiles.length)*100):0;
+      const cntCls=pct>=80?'red':pct>=50?'org':'grn';
+      const avgFp=tiles.length?Math.round(tiles.reduce((s,t)=>s+slotFill(t),0)/tiles.length):0;
+      const barClr=avgFp>0?FCH(avgFp):'var(--wt-border)';
+      return {key,tiles,cols,occ,cntCls,avgFp,barClr,...extra};
+    }
 
     function tileCls(sl){
       if (hooks.slotColor) return hooks.slotColor(sl) ? '' : 'empty';
@@ -2668,7 +2685,7 @@ const View2D = defineComponent({
     <div id="wt-view2d" :style="{display:store.curView==='2d'?'block':'none'}">
       <div class="wt-2d-wrap">
         <template v-if="sections.length">
-          <div v-for="sec in sections" :key="sec.key" class="wt-2d-sec">
+          <div v-for="sec in sections" :key="sec.key" :class="['wt-2d-sec', sec.zone?'wt-2d-sec-zone':'']">
             <div class="wt-2d-sec-hdr">
               <div class="wt-2d-sec-name">{{sec.key}}</div>
               <div :class="['wt-2d-sec-cnt', sec.cntCls]">{{sec.occ}}/{{sec.tiles.length}}</div>
@@ -2676,11 +2693,11 @@ const View2D = defineComponent({
             <div class="wt-2d-sec-cap">
               <div class="wt-2d-sec-cap-fill" :style="{width:sec.avgFp+'%',background:sec.barClr}"></div>
             </div>
-            <div class="wt-2d-slots" :style="{'grid-template-columns':'repeat('+sec.cols+',1fr)'}">
+            <div class="wt-2d-slots" :style="{'grid-template-columns':'repeat('+(sec.zone?sec.gridCols:sec.cols)+',1fr)'}">
               <div v-for="(sl,ti) in sec.tiles" :key="sl.wh"
                 :class="['wt-2d-tile', tileCls(sl), sl.kind==='zone'?'zone':'']"
                 :data-slot="sl.wh"
-                :style="tileStyle(sl, ti)"
+                :style="sec.zone ? {...tileStyle(sl, ti), gridArea: sl.gridArea} : tileStyle(sl, ti)"
                 :title="sl.wh+(tileQty(sl)>0?'\\nQty: '+fmt(tileQty(sl)):'\\nEmpty')"
                 @click="actions.open2DModal(sl.wh)">
                 <div class="wt-2d-tile-name">{{sl.shortName}}</div>
