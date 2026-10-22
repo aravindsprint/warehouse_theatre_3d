@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.0 (2026-10-22)
+
+**Stock Health**: a report that works the moment the app is installed, from data every ERPNext site already has. No warehouse mapping needed.
+
+- **Dead stock:** items with no outward movement in 30 / 90 / 180 / 365 days, by value.
+- **Slow movers:** items that would take more than 6 months to use up at the current rate.
+- **Stock age:** stock value by age (0–30 days up to over a year), estimated first-in-first-out; transfers between warehouses don't reset the age.
+- **Expiring batches:** expired or expiring within 60 days.
+- **Below reorder level:** Item Reorder rules at or under their level (projected qty, as ERPNext's auto re-order uses).
+- **Negative stock** and **value by warehouse**.
+- Opens as a **Health** tab next to 3D / 2D, and as the first screen before setup with a button to set up the 3D map, so new installs see value straight away.
+- Filters by company, uses the top-bar search, and "Locate" jumps to the item on the 3D map.
+
 ## v0.3.1 (2026-10-22)
 
 - Switching floors resets the camera. Before, after the camera flew to a bin (from Locate, Putaway, Alerts or Routes), the next floor opened with that pan and zoom and could appear off-screen.

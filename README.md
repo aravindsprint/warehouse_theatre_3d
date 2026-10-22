@@ -18,6 +18,7 @@ No relabeling required. A one-time setup wizard reads the warehouse hierarchy yo
 
 | Feature | Description |
 |---|---|
+| **Stock Health** | Works right after install, no setup: dead stock, slow movers, stock age, expiring batches, items below reorder level, negative stock and value by warehouse |
 | **Setup wizard** | Scans your existing warehouse tree by depth, lets you assign Building/Floor/Slot/Bin roles, and is done in under two minutes |
 | **3D view** | Interactive Three.js rack visualization — orbit, pan, zoom |
 | **2D floor view** | Section grid with slot tiles and per-level fill indicators |
@@ -88,7 +89,7 @@ Then open the app from the **/apps** screen, or go directly to `/warehouse-theat
 
 ## 🚀 First-time setup
 
-1. Open the app — if no warehouse has been mapped yet, the setup wizard launches automatically
+1. Open the app — if no warehouse has been mapped yet, it opens on **Stock Health** (which needs no setup) with a button to set up the 3D map
 2. **Step 1 — Scan**: the app reads your existing `Warehouse` tree and groups warehouses by depth
 3. **Step 2 — Map levels**: assign Building / Floor / Slot / Bin (or Skip) to each depth shown
 4. **Step 3 — Done**: review the counts, then jump straight into the 3D view
@@ -163,6 +164,7 @@ All methods are under `warehouse_theatre_3d.warehouse_theatre_3d.api`:
 | `operations` | `create_stock_reconciliation` *(POST)* | Draft Stock Reconciliation from counted quantities |
 | `operations` | `get_receipt_items` / `get_putaway_plan` / `create_putaway_transfer` *(POST)* | Putaway suggestions and one draft transfer for the whole plan |
 | `operations` | `get_floor_meta` / `save_dock` *(POST)* | The Floor's dock slot |
+| `health` | `get_stock_health` | Dead/slow stock, ageing, expiring batches, below reorder, negative stock, value by warehouse (cached 10 min) |
 | `routes` | `get_pick_lists` / `get_pick_rows` / `get_period_pick_rows` | Pick List rows on a Floor |
 | `routes` | `reorder_pick_list` *(POST)* | Save a new row order to a draft Pick List |
 
