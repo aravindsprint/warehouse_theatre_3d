@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.1 (2026-10-22)
+
+- Switching floors resets the camera. Before, after the camera flew to a bin (from Locate, Putaway, Alerts or Routes), the next floor opened with that pan and zoom and could appear off-screen.
+- The v0.3.0 notes now mention that a godown's floor zones show as one block in 2D, laid out like the real floor.
+
 ## v0.3.0 (2026-10-21)
 
 Support for godowns without racks, where stock sits on the floor.
@@ -13,6 +18,7 @@ Support for godowns without racks, where stock sits on the floor.
 - **Every tool works on zones:** heatmaps, locate, move/count stock, putaway, replay, export, capacity alerts.
 - **Pick routes:** people walk between piles and cut through gaps between floor areas, while rack rows still block crossing along their length.
 - Floor-plan editor: a zone's cell span sets its width.
+- 2D view: a godown's floor zones show as one block laid out like the real floor; racks keep their row groups.
 
 ## v0.2.1 (2026-10-21)
 
