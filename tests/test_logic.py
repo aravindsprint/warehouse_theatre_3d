@@ -61,6 +61,7 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.insights import (  # noqa: E4
 from warehouse_theatre_3d.warehouse_theatre_3d.api.operations import plan_putaway  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.routes import reorder_rows  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.setup import refine_roles  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.links import document_lines, place_of  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.health import (  # noqa: E402
 	bucket_index,
 	classify_movement,
@@ -227,6 +228,32 @@ class TestStockHealth(unittest.TestCase):
 	def test_never_moved_item_is_dead_with_no_last_date(self):
 		dead, _ = classify_movement({"NEW": {"qty": 5, "value": 50}}, {}, 90, self.today)
 		self.assertEqual((dead[0]["item_code"], dead[0]["idle_days"], dead[0]["last_out"]), ("NEW", None, None))
+
+
+class TestFormLinks(unittest.TestCase):
+	def test_stock_entry_lines_source_and_target(self):
+		rows = [
+			{"idx": 1, "item_code": "A", "transfer_qty": 12, "s_warehouse": "S1", "t_warehouse": "T1", "stock_uom": "Nos"},
+			{"idx": 2, "item_code": "B", "transfer_qty": 0, "qty": 2, "conversion_factor": 10, "t_warehouse": "T2"},
+			{"idx": 3, "item_code": "", "transfer_qty": 5, "s_warehouse": "S1"},          # no item
+			{"idx": 4, "item_code": "C", "transfer_qty": 5},                               # no warehouse
+		]
+		out = document_lines("Stock Entry", rows)
+		self.assertEqual([(r["item_code"], r["qty"], r["source"], r["target"]) for r in out],
+		                 [("A", 12, "S1", "T1"), ("B", 20, None, "T2")])
+
+	def test_delivery_note_is_outward_only(self):
+		out = document_lines("Delivery Note", [{"idx": 1, "item_code": "A", "stock_qty": 3, "warehouse": "W"}])
+		self.assertEqual((out[0]["source"], out[0]["target"]), ("W", None))
+
+	def test_place_of_bin_zone_standalone_and_unmapped(self):
+		b = place_of({"wh": "L1", "wt_type": "Bin", "slot": "A1", "slot_label": "A1", "floor": "F", "floor_label": "Ground", "label": "L1"})
+		self.assertEqual((b["floor"], b["slot"], b["mapped"]), ("F", "A1", True))
+		z = place_of({"wh": "Area 1", "wt_type": "Zone", "zone_floor": "G", "zone_floor_label": "Godown", "label": "Area 1"})
+		self.assertEqual((z["floor"], z["slot"], z["label"]), ("G", "Area 1", "Floor stack"))
+		sz = place_of({"wh": "Yarn Godown", "wt_type": "Zone", "label": "Yarn Godown"})
+		self.assertEqual((sz["floor"], sz["slot"]), ("Yarn Godown", "Yarn Godown"))
+		self.assertFalse(place_of({"wh": "Stores", "wt_type": None, "label": "Stores"})["mapped"])
 
 
 if __name__ == "__main__":
