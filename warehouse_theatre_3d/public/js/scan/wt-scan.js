@@ -715,7 +715,8 @@ const Pick = {
       const have = K.picks[r.row_name];
       const qty = await ask({
         title: `Pick ${r.item_code}`, sub: `Line ${r.idx} · from ${K.at && K.at.warehouse !== r.warehouse ? K.at.path : r.path}${r.batch_no ? ' · batch ' + r.batch_no : ''}`,
-        value: String(have ? have.picked_qty : (scanned && scanned.factor && scanned.factor < r.qty ? scanned.factor : r.qty)),
+        // A pack barcode (box of 12) starts at one pack; anything else at the full line.
+        value: String(have ? have.picked_qty : (scanned && scanned.factor > 1 && scanned.factor < r.qty ? scanned.factor : r.qty)),
         unit: r.uom, ok: 'Picked', quick: [{ label: 'All ' + fmt(r.qty), value: r.qty }, { label: 'None', value: 0 }],
       });
       if (qty === null) return;
