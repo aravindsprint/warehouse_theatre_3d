@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.0 (2026-10-22)
+
+**Warehouse map inside ERPNext forms**, so people reach the app from the screens they already work in.
+
+- **Item:** a "Warehouse locations" panel on the form showing where the item is stored (Floor › Rack › Shelf, or the warehouse when it isn't mapped), with a link to each spot on the map, and a **Show on warehouse map** button.
+- **Stock Entry, Purchase Receipt, Subcontracting Receipt, Delivery Note, Pick List, Material Request** (and Purchase / Sales Invoices that update stock): **Show on warehouse map** opens the document with every line's source (orange) and target (green) marked, numbered like the document's lines. Lines on other floors and warehouses not on the map are listed too.
+- Submitted receipts: **Suggest putaway bins** opens putaway for that document.
+- Pick List: **Optimise pick route** opens its route, on the floor where its items are.
+- Warehouse: **Open in 3D view** jumps to that floor, rack, shelf or zone.
+- Buttons appear under a "Warehouse map" menu, only for System Manager, Stock Manager and Stock User.
+- The app also accepts these links directly: `?locate=ITEM`, `?focus=WAREHOUSE`, `?doc=DOCTYPE&name=NAME`, `?putaway=DOCTYPE&name=NAME`, `?route=PICK_LIST`.
+
 ## v0.4.0 (2026-10-22)
 
 **Stock Health**: a report that works the moment the app is installed, from data every ERPNext site already has. No warehouse mapping needed.

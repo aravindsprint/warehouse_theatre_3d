@@ -18,6 +18,7 @@ No relabeling required. A one-time setup wizard reads the warehouse hierarchy yo
 
 | Feature | Description |
 |---|---|
+| **Inside ERPNext forms** | Item shows where it's stored; Stock Entry, receipts, Delivery Note, Pick List and Material Request get "Show on warehouse map"; receipts get "Suggest putaway bins"; Pick List gets "Optimise pick route"; Warehouse gets "Open in 3D view" |
 | **Stock Health** | Works right after install, no setup: dead stock, slow movers, stock age, expiring batches, items below reorder level, negative stock and value by warehouse |
 | **Setup wizard** | Scans your existing warehouse tree by depth, lets you assign Building/Floor/Slot/Bin roles, and is done in under two minutes |
 | **3D view** | Interactive Three.js rack visualization — orbit, pan, zoom |
@@ -165,6 +166,7 @@ All methods are under `warehouse_theatre_3d.warehouse_theatre_3d.api`:
 | `operations` | `get_receipt_items` / `get_putaway_plan` / `create_putaway_transfer` *(POST)* | Putaway suggestions and one draft transfer for the whole plan |
 | `operations` | `get_floor_meta` / `save_dock` *(POST)* | The Floor's dock slot |
 | `health` | `get_stock_health` | Dead/slow stock, ageing, expiring batches, below reorder, negative stock, value by warehouse (cached 10 min) |
+| `links` | `get_document_locations` / `get_item_locations` / `find_warehouse` | A stock document's lines, an item's locations, or one warehouse, placed on the map (used by the form buttons) |
 | `routes` | `get_pick_lists` / `get_pick_rows` / `get_period_pick_rows` | Pick List rows on a Floor |
 | `routes` | `reorder_pick_list` *(POST)* | Save a new row order to a draft Pick List |
 

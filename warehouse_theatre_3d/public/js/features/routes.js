@@ -339,6 +339,25 @@ WarehouseTheatre3D.register(core => {
   });
   ext.overlays.push(RoutesPanel);
 
+  /* Open the panel on one Pick List (links from ERPNext forms). */
+  core.routes = {
+    async openFor(name) {
+      // Start on the floor holding most of the Pick List's rows, not whichever floor is open.
+      try {
+        const d = await core.api('links', 'get_document_locations', { doctype: 'Pick List', name });
+        const count = {};
+        (d.lines || []).forEach(ln => { const p = ln.from; if (p && p.mapped && p.floor) count[p.floor] = (count[p.floor] || 0) + 1; });
+        const best = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+        const g = best && store.groups.find(x => x.id === best);
+        if (g && (!store.curGrp || store.curGrp.id !== g.id)) await actions.selectGroup(g);
+      } catch (e) { /* fall back to the current floor */ }
+      reset(); state.tab = 'route';
+      ui.openPanel('routes');
+      if (!state.lists.length) await loadLists();
+      await selectList(name);
+    },
+  };
+
   ext.tools.push({
     id: 'routes', icon: '🧭', label: 'Routes', title: 'Pick routes and aisle traffic',
     show: () => !store.replayDate,

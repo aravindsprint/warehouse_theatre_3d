@@ -6,7 +6,7 @@ app_publisher   = "Aravind G"
 app_description = "Free 3D & 2D warehouse storage visualization for any ERPNext warehouse hierarchy"
 app_email       = "aravindsprint@gmail.com"
 app_license     = "MIT"
-app_version     = "0.4.0"
+app_version     = "0.5.0"
 
 add_to_apps_screen = [
     {
@@ -23,6 +23,16 @@ website_route_rules = [
 ]
 
 fixtures = ["Custom Field"]
+
+# "Show on warehouse map" buttons and the Item form's locations panel.
+# One file for all of them; it guards itself against loading twice.
+doctype_js = {
+    dt: "public/js/wt3d_forms.js"
+    for dt in (
+        "Item", "Warehouse", "Stock Entry", "Purchase Receipt", "Purchase Invoice",
+        "Subcontracting Receipt", "Delivery Note", "Sales Invoice", "Pick List", "Material Request",
+    )
+}
 
 scheduler_events = {
     "daily": [
