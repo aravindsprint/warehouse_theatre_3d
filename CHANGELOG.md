@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.0 (2026-10-24)
+## v2.0.0 (2026-10-24)
 
 - **Get updates (opt-in):** after a System Manager's second visit, the 3D app offers a small card to sign up for updates and help from the developer. Nothing is sent unless they tick the consent box and press Send. The card shows exactly what goes (name, email, optional company and phone, and the site's address), and never any stock or business data. *Not now* hides it for 30 days; *Don't ask again* hides it for good. Sign-ups arrive as Leads in the publisher's ERPNext through a public Web Form.
 
