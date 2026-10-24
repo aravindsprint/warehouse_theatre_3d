@@ -18,6 +18,8 @@ No relabeling required. A one-time setup wizard reads the warehouse hierarchy yo
 
 | Feature | Description |
 |---|---|
+| **Warehouse Scan (phone app)** | `/warehouse-scan`: put away receipts, walk Pick Lists and cycle count locations with the phone camera or a hand-held scanner. Prints QR location labels for every shelf and floor area |
+| **Inside ERPNext forms** | Item shows where it's stored; Stock Entry, receipts, Delivery Note, Pick List and Material Request get "Show on warehouse map"; receipts get "Suggest putaway bins"; Pick List gets "Optimise pick route"; Warehouse gets "Open in 3D view" |
 | **Stock Health** | Works right after install, no setup: dead stock, slow movers, stock age, expiring batches, items below reorder level, negative stock and value by warehouse |
 | **Setup wizard** | Scans your existing warehouse tree by depth, lets you assign Building/Floor/Slot/Bin roles, and is done in under two minutes |
 | **3D view** | Interactive Three.js rack visualization — orbit, pan, zoom |
@@ -139,6 +141,22 @@ The toolbar under the top bar holds the newer tools. A few things worth knowing:
 
 ---
 
+## 📱 Warehouse Scan (phone app)
+
+Open **`/warehouse-scan`** on a phone (or the **Warehouse Scan** tile on `/apps`) and install it: on Android, Chrome's **⋮ → Install app**; on iPhone, Safari's **Share → Add to Home Screen**. On rugged scanners (Zebra, Honeywell…), install it the same way and set the scanner to keyboard output with Enter after each scan. It works with the phone camera, with hand-held / ring scanners that type the code and press Enter, or by typing.
+
+1. **Print location labels first.** *Print location labels* makes an A4 sheet of QR labels (24 small or 8 large per page) for every shelf and floor area on the floor. Stick one on each. Item barcodes come from the Item's *Barcodes* table; a barcode with a UOM (e.g. a box of 12) counts as that many.
+2. **Put away:** scan a Purchase Receipt, Stock Entry or Subcontracting Receipt (or one item). The app shows the best location for each item; scan that shelf's label and confirm the quantity. *Post* makes one Material Transfer, submitted straight away unless an item needs batch or serial numbers.
+3. **Pick:** scan or choose a draft Pick List. It walks you stop by stop in walking order: scan the shelf, then each item, and confirm the quantity (short picks are fine). Picking from a different shelf updates that line's warehouse. *Save & submit* writes picked quantities to the Pick List.
+4. **Count:** start from the *Due for counting* list (never counted first, then oldest, then highest value) or scan any location. Scan every item (each scan adds one, or a pack), tap a line to type a total, and turn on *Blind count* to hide ERPNext's quantities. Differences become a **draft** Stock Reconciliation for a Stock Manager to submit; the location's last-counted date is recorded even when nothing differs.
+5. **Scan anything** on the home screen: a location shows what's in it, an item shows where it is, a Pick List or receipt opens the right job.
+
+ERPNext forms link here too: **Pick with scanner** on draft Pick Lists, **Put away with scanner** on submitted receipts, and **Count with scanner** on mapped Bin and Zone warehouses.
+
+The camera needs the site on **https**. Batch and serial items can be counted and moved, but their batch/serial numbers are finished in ERPNext.
+
+---
+
 ## 🔌 API reference
 
 All methods are under `warehouse_theatre_3d.warehouse_theatre_3d.api`:
@@ -165,6 +183,10 @@ All methods are under `warehouse_theatre_3d.warehouse_theatre_3d.api`:
 | `operations` | `get_receipt_items` / `get_putaway_plan` / `create_putaway_transfer` *(POST)* | Putaway suggestions and one draft transfer for the whole plan |
 | `operations` | `get_floor_meta` / `save_dock` *(POST)* | The Floor's dock slot |
 | `health` | `get_stock_health` | Dead/slow stock, ageing, expiring batches, below reorder, negative stock, value by warehouse (cached 10 min) |
+| `links` | `get_document_locations` / `get_item_locations` / `find_warehouse` | A stock document's lines, an item's locations, or one warehouse, placed on the map (used by the form buttons) |
+| `scan` | `resolve_code` | What a scanned code is: location, item (with pack size), batch, serial no., Pick List or receipt |
+| `scan` | `get_floor_locations` / `get_pick_list` | A floor's locations with the count queue; a Pick List's rows in walking order |
+| `scan` | `post_transfer` / `save_picks` / `finish_count` *(POST)* | Moves from the phone, picked quantities on a draft Pick List, and a location count |
 | `routes` | `get_pick_lists` / `get_pick_rows` / `get_period_pick_rows` | Pick List rows on a Floor |
 | `routes` | `reorder_pick_list` *(POST)* | Save a new row order to a draft Pick List |
 
@@ -205,6 +227,8 @@ Free. Always. Listed on the Frappe Cloud Marketplace under Frappe's [revenue-sha
 | Setup wizard shows no warehouses | Create at least one `Warehouse` in Stock settings first |
 | Slots overlapping in 3D | Use **Edit floor plan** to set row/column positions if the wizard's defaults need adjusting |
 | Bins not appearing as levels | Confirm the Bin-role depth in setup actually contains the warehouses meant to be shelf levels |
+| Camera button says it needs https | Browsers only allow the camera on https sites. Use a hand-held scanner, or serve the site over https |
+| A label scans as "isn't a location" | Reprint it from *Print location labels*; labels hold the warehouse name, so renaming a warehouse needs a new label |
 | App not on /apps screen | Confirm your role is System Manager, Stock Manager, or Stock User |
 
 ---

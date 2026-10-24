@@ -215,6 +215,16 @@ WarehouseTheatre3D.register(core => {
   });
   ext.overlays.push(PutawayPanel);
 
+  /* Open the panel on a receipt and suggest bins straight away (links from ERPNext forms). */
+  core.putaway = {
+    async openFor(doctype, name) {
+      reset();
+      state.tab = 'doc'; state.doctype = doctype; state.docname = name;
+      ui.openPanel('putaway');
+      await loadDoc();
+    },
+  };
+
   ext.tools.push({
     id: 'putaway', icon: '📥', label: 'Putaway', title: 'Suggest bins for received goods',
     show: () => !store.replayDate,
