@@ -42,6 +42,7 @@ def _install_frappe_stub():
 	utils.now_datetime = datetime.now
 	utils.get_url = lambda p="": "https://example.test" + p
 	utils.escape_html = lambda s: s
+	utils.validate_email_address = lambda e, throw=False: e if "@" in (e or "") else ""
 	frappe.utils = utils
 
 	model = types.ModuleType("frappe.model")
@@ -64,6 +65,7 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.operations import plan_putawa
 from warehouse_theatre_3d.warehouse_theatre_3d.api.routes import reorder_rows  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.setup import refine_roles  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.links import document_lines, place_of  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.updates import lead_payload, should_show  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.scan import (  # noqa: E402
 	apply_picks,
 	clean_scan,
@@ -310,6 +312,25 @@ class TestScan(unittest.TestCase):
 		self.assertEqual(place_path({"mapped": True, "slot_label": "A3", "label": "L1"}), "A3 › L1")
 		self.assertEqual(place_path({"mapped": True, "slot_label": "Area 1", "label": "Floor stack"}), "Area 1")
 		self.assertEqual(place_path({"mapped": False, "warehouse": "Stores - PD", "warehouse_label": "Stores"}), "Stores")
+
+
+class TestUpdatesSignup(unittest.TestCase):
+	def test_should_show(self):
+		today = date(2026, 10, 24)
+		self.assertTrue(should_show("", today))
+		self.assertFalse(should_show("sent", today))
+		self.assertFalse(should_show("never", today))
+		self.assertFalse(should_show("snooze:2026-11-23", today))
+		self.assertTrue(should_show("snooze:2026-10-24", today))
+
+	def test_lead_payload_sends_only_what_was_typed(self):
+		import json
+		p = lead_payload({"name": " Ravi ", "email": "ravi@example.com", "company": "", "phone": None, "stock": "x"},
+		                 "https://erp.client.in", "1.0.0", web_form="wf")
+		self.assertEqual(p["web_form"], "wf")
+		d = json.loads(p["data"])
+		self.assertEqual(d, {"doctype": "Lead", "web_form_name": "wf", "first_name": "Ravi", "email_id": "ravi@example.com",
+		                     "company_name": "", "mobile_no": "", "website": "https://erp.client.in"})
 
 
 if __name__ == "__main__":

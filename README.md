@@ -157,6 +157,16 @@ The camera needs the site on **https**. Batch and serial items can be counted an
 
 ---
 
+## 📬 Updates sign-up (opt-in)
+
+After a System Manager's second visit, the 3D app offers a small **Get updates** card (name, email, optional company and phone). Nothing is sent unless they tick the consent box and press **Send**; the card shows exactly what is sent (those fields and the site's address, no stock or business data). *Not now* hides it for 30 days, *Don't ask again* for good. Other roles never see it.
+
+**For the publisher (receiving sign-ups as Leads):**
+1. On your own ERPNext, create a **Web Form**: Doctype **Lead**, route `warehouse-theatre-signup`, *Login Required* off, *Published* on, with the fields `first_name`, `email_id`, `company_name`, `mobile_no` and `website`.
+2. Set `UPDATES_SITE` in `warehouse_theatre_3d/warehouse_theatre_3d/api/updates.py` to that site's address (e.g. `https://erp.example.com`) and release. While it's empty, the card never appears.
+
+---
+
 ## 🔌 API reference
 
 All methods are under `warehouse_theatre_3d.warehouse_theatre_3d.api`:
@@ -187,6 +197,7 @@ All methods are under `warehouse_theatre_3d.warehouse_theatre_3d.api`:
 | `scan` | `resolve_code` | What a scanned code is: location, item (with pack size), batch, serial no., Pick List or receipt |
 | `scan` | `get_floor_locations` / `get_pick_list` | A floor's locations with the count queue; a Pick List's rows in walking order |
 | `scan` | `post_transfer` / `save_picks` / `finish_count` *(POST)* | Moves from the phone, picked quantities on a draft Pick List, and a location count |
+| `updates` | `get_signup_state` / `submit_signup` *(POST)* / `dismiss_signup` *(POST)* | The opt-in updates card |
 | `routes` | `get_pick_lists` / `get_pick_rows` / `get_period_pick_rows` | Pick List rows on a Floor |
 | `routes` | `reorder_pick_list` *(POST)* | Save a new row order to a draft Pick List |
 
