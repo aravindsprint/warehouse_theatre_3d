@@ -95,7 +95,7 @@ WarehouseTheatre3D.register(core => {
             <div class="wtf-field"><label for="wtf-upd-p">Phone <span class="wtf-muted">optional</span></label><input id="wtf-upd-p" class="wtf-inp" v-model="s.form.phone" type="tel" autocomplete="tel"/></div>
           </div>
           <label class="wtf-upd-ok"><input type="checkbox" v-model="s.consent"/>
-            <span>Send these details and this site's address (<span class="wtf-upd-site">{{siteShort}}</span>) to the app's developer, Aravind G (Arkotrix), for updates and replies. No stock or business data is sent. You can unsubscribe any time.</span></label>
+            <span>Send these details and this site's address (<span class="wtf-upd-site">{{siteShort}}</span>) to the app's developer, Aravind G, for updates and replies. No stock or business data is sent. You can unsubscribe any time.</span></label>
           <div class="wtf-upd-b"><button type="submit" class="wtf-btn wtf-btn-pri" :disabled="s.busy">{{ s.busy ? 'Sending…' : 'Send' }}</button></div>
           <div class="wtf-upd-links">
             <button type="button" @click="dismiss(false)">Not now</button>
