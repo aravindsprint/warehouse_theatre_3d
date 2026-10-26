@@ -4,6 +4,15 @@
 
 Upgrading: run `bench migrate` (new Pick List and Sales Invoice fields, new settings) and `bench build`.
 
+### Replenishment and first-expiry-first-out picking
+
+- **Refill levels for pick shelves:** a new **Warehouse Pick Face** list (Stock Manager) sets, for one item on one shelf or floor area, *Refill at or below* and *Fill up to*, in stock units.
+- **What needs refilling:** a shelf is due when its stock, less what draft Pick Lists will still take from it, is at or below its refill level. It's **urgent** when draft picks already need more than the shelf holds. The refill brings it back up to its top level, taken from other locations of the same company: same floor first, then the batch that expires first, then the location holding the most. Reserve that can't cover a full refill is flagged.
+- **Warehouse Scan → Replenish:** the floor's refills, urgent first. Go to the suggested location, scan it, scan the item, confirm the quantity (from one or several locations), then scan the pick shelf: one Material Transfer is posted. Batch or serial items are saved as a draft to finish in ERPNext.
+- **Operations → Replenish:** the same list on the desk, with **Create transfer (draft)** for the refills you tick.
+- **FEFO in Pick:** batch items show each line's batch expiry. A line with no batch set shows which batch on that shelf to take first; scanning one that expires later asks before picking it. A line where ERPNext chose a batch expiring later than another on the same shelf is flagged.
+- Everything respects User Permissions: refills only use and show locations the user may see.
+
 ### Pack and Dispatch in Warehouse Scan
 
 Two new modes finish the order flow on the floor: pick → **pack** → **dispatch**.

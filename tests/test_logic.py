@@ -95,6 +95,12 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.packing import (  # noqa: E40
 	parse_carton,
 )
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.replenish import (  # noqa: E402
+	allocate_sources,
+	fefo_advice,
+	fefo_order,
+	refill_needs,
+)
 from warehouse_theatre_3d.warehouse_theatre_3d.api.health import (  # noqa: E402
 	bucket_index,
 	classify_movement,
@@ -552,6 +558,49 @@ class TestAccess(unittest.TestCase):
 				setattr(frappe, k, v)
 			frappe.db.sql = saved_sql
 			sys.modules.pop("frappe.core.doctype.user_permission.user_permission", None)
+
+
+class TestReplenish(unittest.TestCase):
+	FACES = [
+		{"name": "f1", "item_code": "A", "warehouse": "P1", "min_qty": 10, "max_qty": 50},
+		{"name": "f2", "item_code": "B", "warehouse": "P2", "min_qty": 5, "max_qty": 20},
+		{"name": "f3", "item_code": "C", "warehouse": "P3", "min_qty": 5, "max_qty": 20},
+	]
+
+	def test_refill_needs(self):
+		on_hand = {("A", "P1"): 12, ("B", "P2"): 4, ("C", "P3"): 30}
+		pending = {("A", "P1"): 15}
+		out = refill_needs(self.FACES, on_hand, pending)
+		self.assertEqual([r["name"] for r in out], ["f1", "f2"])     # C is above its level
+		a = out[0]
+		self.assertTrue(a["urgent"])                                  # picks need 15, shelf has 12
+		self.assertEqual((a["available"], a["need"]), (-3, 53))       # back up to 50 after the picks
+		self.assertEqual((out[1]["need"], out[1]["urgent"]), (16, False))
+		self.assertEqual(refill_needs(self.FACES, {("A", "P1"): 11, ("B", "P2"): 6, ("C", "P3"): 6}, {}), [])
+
+	def test_allocate_sources(self):
+		src = [
+			{"warehouse": "R-other-floor", "qty": 100, "floor": "F2", "expiry": "2026-11-01"},
+			{"warehouse": "R-late", "qty": 10, "floor": "F1", "expiry": "2027-05-01"},
+			{"warehouse": "R-early", "qty": 10, "floor": "F1", "expiry": "2026-12-01"},
+			{"warehouse": "R-none", "qty": 40, "floor": "F1", "expiry": None},
+		]
+		picks, short = allocate_sources(25, src, floor="F1")
+		self.assertEqual([(p["warehouse"], p["qty"]) for p in picks], [("R-early", 10), ("R-late", 10), ("R-none", 5)])
+		self.assertEqual(short, 0)
+		picks, short = allocate_sources(200, src, floor="F1")
+		self.assertEqual((len(picks), short), (4, 40))
+		self.assertEqual(allocate_sources(5, [], "F1"), ([], 5))
+
+	def test_fefo(self):
+		batches = [{"batch_no": "B2", "qty": 5, "expiry": "2027-01-01"}, {"batch_no": "B1", "qty": 5, "expiry": "2026-11-15"},
+		           {"batch_no": "B0", "qty": 0, "expiry": "2026-10-01"}, {"batch_no": "BX", "qty": 9, "expiry": None}]
+		self.assertEqual([b["batch_no"] for b in fefo_order(batches)], ["B1", "B2", "BX"])
+		self.assertIsNone(fefo_advice("B1", batches))
+		self.assertEqual(fefo_advice("B2", batches), {"batch_no": "B1", "expiry": "2026-11-15", "scanned_expiry": "2027-01-01"})
+		self.assertEqual(fefo_advice("BX", batches)["batch_no"], "B1")
+		self.assertIsNone(fefo_advice("B2", [{"batch_no": "BX", "qty": 1, "expiry": None}, {"batch_no": "B2", "qty": 1, "expiry": "2027-01-01"}]))
+		self.assertIsNone(fefo_advice("B9", []))
 
 
 if __name__ == "__main__":

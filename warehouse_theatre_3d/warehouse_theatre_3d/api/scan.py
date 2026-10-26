@@ -324,12 +324,35 @@ def get_pick_list(name: str):
 			"batch_no": r.get("batch_no"), "path": place_path(place),
 			"floor": place.get("floor"), "floor_label": place.get("floor_label"), "mapped": place.get("mapped"),
 		})
+	_add_fefo(out)
 	return {
 		"name": doc.name, "docstatus": doc.docstatus, "status": doc.get("status"),
 		"customer": doc.get("customer"), "purpose": doc.get("purpose"),
 		"can_write": bool(doc.docstatus == 0 and frappe.has_permission("Pick List", "write", doc.name)),
 		"rows": out, "url": _doc_url("Pick List", doc.name),
 	}
+
+
+def _add_fefo(rows):
+	"""For batch items: the batches on each row's shelf, expiring first, so the scanner can
+	steer the picker to the one that expires first."""
+	from warehouse_theatre_3d.warehouse_theatre_3d.api.replenish import batch_balances, fefo_advice
+
+	codes = {r["item_code"] for r in rows}
+	if not codes:
+		return
+	batch_items = set(frappe.get_all("Item", filters={"name": ["in", list(codes)], "has_batch_no": 1}, pluck="name"))
+	todo = [r for r in rows if r["item_code"] in batch_items]
+	if not todo:
+		return
+	stock = batch_balances({r["item_code"] for r in todo}, {r["warehouse"] for r in todo})
+	for r in todo:
+		batches = stock.get((r["item_code"], r["warehouse"])) or []
+		r["batches"] = batches[:4]
+		mine = next((b for b in batches if b["batch_no"] == r.get("batch_no")), None)
+		r["batch_expiry"] = mine["expiry"] if mine else None
+		# ERPNext chose a batch that expires later than one on the same shelf.
+		r["fefo"] = fefo_advice(r.get("batch_no"), batches) if r.get("batch_no") else None
 
 
 @frappe.whitelist(methods=["POST"])
