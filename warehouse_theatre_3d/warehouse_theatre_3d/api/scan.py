@@ -33,6 +33,7 @@ SCAN_DOCS = {
 	"Purchase Receipt": "putaway",
 	"Stock Entry": "putaway",
 	"Subcontracting Receipt": "putaway",
+	"Purchase Order": "receive",
 	"Delivery Note": "pack",
 	"Sales Invoice": "pack",
 }

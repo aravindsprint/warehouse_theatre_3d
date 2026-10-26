@@ -12,7 +12,13 @@
   "alert_recipients",
   "fulfillment_section",
   "dispatch_document",
-  "require_carton_scan"
+  "require_carton_scan",
+  "inbound_section",
+  "qc_warehouse",
+  "hold_all_receipts",
+  "column_break_inbound",
+  "rejected_warehouse",
+  "returns_warehouse"
  ],
  "fields": [
   {
@@ -67,6 +73,42 @@
    "label": "Scan every carton before dispatch",
    "default": "0",
    "description": "Dispatch in Warehouse Scan waits until each carton label of the order has been scanned onto the vehicle."
+  },
+  {
+   "fieldname": "inbound_section",
+   "fieldtype": "Section Break",
+   "label": "Receiving and returns"
+  },
+  {
+   "fieldname": "qc_warehouse",
+   "fieldtype": "Link",
+   "label": "Quality hold warehouse",
+   "options": "Warehouse",
+   "description": "Receipts of items with “Inspection Required before Purchase” (or every receipt, below) go here until released to putaway or rejected."
+  },
+  {
+   "fieldname": "hold_all_receipts",
+   "fieldtype": "Check",
+   "label": "Hold every receipt for checking",
+   "default": "0"
+  },
+  {
+   "fieldname": "column_break_inbound",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rejected_warehouse",
+   "fieldtype": "Link",
+   "label": "Rejected warehouse",
+   "options": "Warehouse",
+   "description": "Damaged goods found at receiving, failed checks and damaged customer returns."
+  },
+  {
+   "fieldname": "returns_warehouse",
+   "fieldtype": "Link",
+   "label": "Returns warehouse",
+   "options": "Warehouse",
+   "description": "Where good customer returns go before putaway. Blank: back to the warehouse they were sent from."
   }
  ],
  "index_web_pages_for_search": 0,

@@ -51,12 +51,23 @@
 			frm.add_custom_button(__('Pack with scanner'), () => openScan({ pack: frm.doc.name, doctype: frm.doctype }), GROUP);
 			frm.add_custom_button(__('Dispatch with scanner'), () => openScan({ dispatch: frm.doc.name, doctype: frm.doctype }), GROUP);
 		}
+		const delivered = frm.doctype === 'Delivery Note' || (frm.doctype === 'Sales Invoice' && frm.doc.update_stock);
+		if (delivered && frm.doc.docstatus === 1 && !frm.doc.is_return) {
+			frm.add_custom_button(__('Return with scanner'), () => openScan({ return: frm.doc.name, doctype: frm.doctype }), GROUP);
+		}
 		if (frm.doctype === 'Pick List' && frm.doc.docstatus === 0) {
 			frm.add_custom_button(__('Pick with scanner'), () => openScan({ pick: frm.doc.name }), GROUP);
 		}
 	}
 
 	DOC_TYPES.forEach(dt => frappe.ui.form.on(dt, { refresh: docButtons }));
+	// Purchase Order: receive it on the phone (it isn't shown on the map itself).
+	frappe.ui.form.on('Purchase Order', {
+		refresh(frm) {
+			if (!allowed() || frm.doc.docstatus !== 1 || (frm.doc.per_received || 0) >= 100) return;
+			frm.add_custom_button(__('Receive with scanner'), () => openScan({ receive: frm.doc.name }), GROUP);
+		},
+	});
 
 	// ── Item: where it's stored, right on the form ──
 	function placeText(r) {

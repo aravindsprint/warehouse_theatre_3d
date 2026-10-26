@@ -343,7 +343,10 @@ EXT.tiles.push(
 );
 // A Delivery Note or Sales Invoice scanned from home: pack it while it has lines left, else dispatch.
 EXT.docActions.pack = async r => {
-  if (r.docstatus !== 0) { flash('warn', `${r.name} is already dispatched`); return; }
+  if (r.docstatus !== 0) {
+    if (r.docstatus === 1 && EXT.screens.returns) { flash('warn', `${r.name} is already dispatched. Taking a return?`); W.core.inbound.Returns.open(r.doctype, r.name); return; }
+    flash('warn', `${r.name} is already dispatched`); return;
+  }
   await Pack.open({ doctype: r.doctype, name: r.name }, true);
   if (PK.doc && PK.doc.lines.every(ln => ln.packed + 1e-9 >= ln.qty)) { Pack.reset(); await Dispatch.open({ doctype: r.doctype, name: r.name }); }
   else if (PK.doc) flash('ok', PK.doc.name);
