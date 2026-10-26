@@ -76,7 +76,7 @@ def _users(roles):
 
 
 def _seen(key):
-	return bool(frappe.cache().get_value("wt3d:notified:" + key))
+	return bool(frappe.cache().get_value("wt3d:notified:" + key, expires=True))
 
 
 def _mark(keys):

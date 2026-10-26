@@ -632,7 +632,7 @@ def get_operations(company: str | None = None, days: int | str = 30, floor: str 
 	key = f"wt3d:operations:{user}:{company or ''}:{days}:{floor or ''}"
 	cache = frappe.cache()
 	if not _int(refresh):
-		hit = cache.get_value(key)
+		hit = cache.get_value(key, expires=True)
 		if hit:
 			return hit
 

@@ -96,7 +96,7 @@ def get_stock_health(company: str | None = None, days: int | str = 90, expiry_da
 	key = f"wt3d:stock_health:{frappe.session.user}:{company or ''}:{days}:{expiry_days}"
 	cache = frappe.cache()
 	if not _int(refresh):
-		hit = cache.get_value(key)
+		hit = cache.get_value(key, expires=True)
 		if hit:
 			return hit
 	result = _compute(company or None, days, expiry_days)

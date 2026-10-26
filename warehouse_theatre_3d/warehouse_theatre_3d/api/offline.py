@@ -39,10 +39,11 @@ def replay_safe(fn):
 			return fn(*args, **kwargs)
 		cache = frappe.cache()
 		key = f"wt3d:once:{frappe.session.user}:{cid}"
-		done = cache.get_value(key)
+		# expires=True: read Redis itself, not the per-request copy (which also remembers misses).
+		done = cache.get_value(key, expires=True)
 		if done is not None:
 			return done.get("result")
-		if cache.get_value(key + ":running"):
+		if cache.get_value(key + ":running", expires=True):
 			frappe.throw(_("This is still being saved. It will be checked again shortly."))
 		cache.set_value(key + ":running", 1, expires_in_sec=RUNNING_SECONDS)
 		try:
