@@ -37,13 +37,13 @@ def _int(v):
 	except: return 0
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def get_companies():
 	_require_view_permission()
 	return frappe.db.get_all('Company', fields=['name', 'abbr'], order_by='name asc')
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def get_warehouse_groups(company=None):
 	"""Return all Floor warehouses grouped under their Building."""
 	_require_view_permission()
@@ -88,7 +88,7 @@ WT_TYPES = ('Building', 'Floor', 'Slot', 'Bin', 'Zone')
 ZONE_LEVEL_LABEL = 'Floor stack'
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def get_slots(group_warehouse):
 	"""Racks (Slot warehouses with their Bin levels) and floor-storage Zones on a Floor.
 
@@ -110,7 +110,7 @@ def get_slots(group_warehouse):
 	return sorted(slots + zones, key=lambda r: (r['row'], r['col'], r['label'] or ''))
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def get_all_slots(group_warehouse):
 	"""All Slots and Zones on a Floor, for the floor plan editor."""
 	_require_view_permission()
@@ -226,7 +226,7 @@ def _get_items(level_wh):
 	""", (level_wh,), as_dict=True)
 
 
-@frappe.whitelist(methods=["POST"])
+@frappe.whitelist(allow_guest=False, methods=["POST"])
 def save_slot_position(warehouse, row, col, row_gap=0, span=None):
 	_require_edit_permission()
 	values = {
@@ -241,7 +241,7 @@ def save_slot_position(warehouse, row, col, row_gap=0, span=None):
 	return {'ok': True}
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def get_floor_layout(group_warehouse):
 	"""Return the saved Floor Plan editor grid (rows/cells incl. span & aisle flags) for a Floor.
 
@@ -260,7 +260,7 @@ def get_floor_layout(group_warehouse):
 		return {}
 
 
-@frappe.whitelist(methods=["POST"])
+@frappe.whitelist(allow_guest=False, methods=["POST"])
 def save_floor_layout(group_warehouse, layout):
 	"""Persist the Floor Plan editor grid as JSON on the Floor warehouse."""
 	_require_edit_permission()
@@ -270,7 +270,7 @@ def save_floor_layout(group_warehouse, layout):
 	return {'ok': True}
 
 
-@frappe.whitelist(methods=["POST"])
+@frappe.whitelist(allow_guest=False, methods=["POST"])
 def save_stack_config(slot_warehouse, levels):
 	_require_edit_permission()
 	if isinstance(levels, str):
@@ -302,7 +302,7 @@ def save_stack_config(slot_warehouse, levels):
 	return {'ok': True}
 
 
-@frappe.whitelist(methods=["POST"])
+@frappe.whitelist(allow_guest=False, methods=["POST"])
 def save_uom_capacity(warehouse, uom, capacity):
 	_require_edit_permission()
 	# Check if row already exists
@@ -326,8 +326,9 @@ def save_uom_capacity(warehouse, uom, capacity):
 	return {'ok': True}
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def get_summary():
+	_require_view_permission()
 	data = frappe.db.sql("""
 		SELECT COUNT(DISTINCT w.name)          AS total,
 		       COALESCE(SUM(b.actual_qty), 0)  AS total_qty,
@@ -339,14 +340,14 @@ def get_summary():
 	return data[0] if data else {}
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def check_app_permission():
 	"""Used by Frappe to decide whether to show the app icon on /apps screen."""
 	user_roles = set(frappe.get_roles())
 	return bool(user_roles & VIEW_ROLES)
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def get_user_access():
 	"""Returns the current user's access level for the frontend to adapt UI."""
 	user_roles = set(frappe.get_roles())
@@ -366,14 +367,14 @@ def _default_is_group(wt_warehouse_type):
 	return 0 if wt_warehouse_type in ('Bin', 'Zone') else 1
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def get_uom_list():
 	"""UOM options for the WT UOM Capacities table in the warehouse form."""
 	_require_view_permission()
 	return frappe.get_all('UOM', fields=['name'], order_by='name asc', pluck='name')
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def get_parent_warehouse_options(wt_warehouse_type, company=None):
 	"""Valid parents for a given Warehouse Type (Theatre): one theatre level up.
 	Building's valid parent is the company's root warehouse (e.g. 'All Warehouses - ABBR')."""
@@ -401,7 +402,7 @@ def get_parent_warehouse_options(wt_warehouse_type, company=None):
 	return []
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def get_warehouse_manage_list(company=None):
 	"""Full warehouse list (all theatre roles, incl. disabled) for the Manage Warehouses panel."""
 	_require_edit_permission()
@@ -417,7 +418,7 @@ def get_warehouse_manage_list(company=None):
 	)
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False)
 def get_warehouse_detail(warehouse):
 	"""Full field set for the edit form, incl. the WT UOM Capacities child table."""
 	_require_edit_permission()
@@ -442,7 +443,7 @@ def get_warehouse_detail(warehouse):
 	}
 
 
-@frappe.whitelist(methods=["POST"])
+@frappe.whitelist(allow_guest=False, methods=["POST"])
 def create_warehouse(data):
 	_require_edit_permission()
 	if isinstance(data, str):
@@ -482,7 +483,7 @@ def create_warehouse(data):
 	return {'ok': True, 'name': doc.name}
 
 
-@frappe.whitelist(methods=["POST"])
+@frappe.whitelist(allow_guest=False, methods=["POST"])
 def update_warehouse(warehouse, data):
 	_require_edit_permission()
 	if isinstance(data, str):
@@ -520,7 +521,7 @@ def update_warehouse(warehouse, data):
 	return {'ok': True, 'name': doc.name}
 
 
-@frappe.whitelist(methods=["POST"])
+@frappe.whitelist(allow_guest=False, methods=["POST"])
 def delete_warehouse(warehouse):
 	"""Hard-delete when safe; falls back to disabling when the warehouse has
 	stock/transaction history (Frappe would raise LinkExistsError on delete)."""
