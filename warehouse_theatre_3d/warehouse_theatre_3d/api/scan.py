@@ -11,6 +11,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	_flt,
 	_int,
@@ -19,6 +20,7 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	parse_json,
 )
 from warehouse_theatre_3d.warehouse_theatre_3d.api.links import resolve_locations
+from warehouse_theatre_3d.warehouse_theatre_3d.api.packing import parse_carton
 from warehouse_theatre_3d.warehouse_theatre_3d.api.operations import (
 	_build_transfer,
 	_doc_url,
@@ -31,6 +33,8 @@ SCAN_DOCS = {
 	"Purchase Receipt": "putaway",
 	"Stock Entry": "putaway",
 	"Subcontracting Receipt": "putaway",
+	"Delivery Note": "pack",
+	"Sales Invoice": "pack",
 }
 MAPPED_TYPES = ("Bin", "Zone", "Slot", "Floor")
 
@@ -157,6 +161,7 @@ def resolve_code(code: str):
 		frappe.throw(_("Nothing was scanned."))
 
 	if frappe.db.exists("Warehouse", code):
+		access.require_floor(code)
 		return _location(code)
 
 	barcode = frappe.db.get_value("Item Barcode", {"barcode": code}, ["parent", "uom"], as_dict=True)
@@ -184,6 +189,16 @@ def resolve_code(code: str):
 			return {"kind": "document", "doctype": doctype, "name": code, "action": action,
 			        "docstatus": frappe.db.get_value(doctype, code, "docstatus")}
 
+	# A carton label from Pack: "<Delivery Note or Sales Invoice>/<carton no>".
+	carton = parse_carton(code)
+	if carton:
+		for doctype in ("Delivery Note", "Sales Invoice"):
+			if frappe.db.exists(doctype, carton[0]):
+				if not frappe.has_permission(doctype, "read", carton[0]):
+					frappe.throw(_("You can't open {0} {1}.").format(doctype, carton[0]), frappe.PermissionError)
+				return {"kind": "carton", "doctype": doctype, "name": carton[0], "no": carton[1], "code": code,
+				        "docstatus": frappe.db.get_value(doctype, carton[0], "docstatus")}
+
 	# A label typed by hand, e.g. "A3-L1": accept it when exactly one mapped warehouse has that name.
 	named = frappe.get_all(
 		"Warehouse",
@@ -191,6 +206,7 @@ def resolve_code(code: str):
 		pluck="name", limit=2,
 	)
 	if len(named) == 1:
+		access.require_floor(named[0])
 		return _location(named[0])
 
 	return {"kind": "unknown", "code": code}
@@ -231,7 +247,8 @@ def get_floor_locations(floor: str):
 	"""Every Bin and Zone on a floor with its stock, when it was last counted, and the
 	order to count them in."""
 	_require_view_permission()
-	bins = get_floor_bins(floor)
+	access.require_floor(floor)
+	bins = access.keep(get_floor_bins(floor), access.allowed_warehouses(), "wh")
 	whs = [b.wh for b in bins]
 	stock = {}
 	if whs:
@@ -299,7 +316,9 @@ def get_pick_list(name: str):
 	out = []
 	for r in rows:
 		place = places.get(r.warehouse) or {"mapped": False, "warehouse": r.warehouse}
+		pos = positions.get(r.warehouse)
 		out.append({
+			"grid": [_int(pos.row), _int(pos.col), _int(pos.level)] if pos else None,
 			"row_name": r.name, "idx": r.idx, "walk": order.get(r.name, r.idx),
 			"item_code": r.item_code, "item_name": r.item_name,
 			"qty": _flt(r.get("stock_qty")) or _flt(r.qty), "uom": r.get("stock_uom") or r.uom,
@@ -307,12 +326,35 @@ def get_pick_list(name: str):
 			"batch_no": r.get("batch_no"), "path": place_path(place),
 			"floor": place.get("floor"), "floor_label": place.get("floor_label"), "mapped": place.get("mapped"),
 		})
+	_add_fefo(out)
 	return {
 		"name": doc.name, "docstatus": doc.docstatus, "status": doc.get("status"),
 		"customer": doc.get("customer"), "purpose": doc.get("purpose"),
 		"can_write": bool(doc.docstatus == 0 and frappe.has_permission("Pick List", "write", doc.name)),
 		"rows": out, "url": _doc_url("Pick List", doc.name),
 	}
+
+
+def _add_fefo(rows):
+	"""For batch items: the batches on each row's shelf, expiring first, so the scanner can
+	steer the picker to the one that expires first."""
+	from warehouse_theatre_3d.warehouse_theatre_3d.api.replenish import batch_balances, fefo_advice
+
+	codes = {r["item_code"] for r in rows}
+	if not codes:
+		return
+	batch_items = set(frappe.get_all("Item", filters={"name": ["in", list(codes)], "has_batch_no": 1}, pluck="name"))
+	todo = [r for r in rows if r["item_code"] in batch_items]
+	if not todo:
+		return
+	stock = batch_balances({r["item_code"] for r in todo}, {r["warehouse"] for r in todo})
+	for r in todo:
+		batches = stock.get((r["item_code"], r["warehouse"])) or []
+		r["batches"] = batches[:4]
+		mine = next((b for b in batches if b["batch_no"] == r.get("batch_no")), None)
+		r["batch_expiry"] = mine["expiry"] if mine else None
+		# ERPNext chose a batch that expires later than one on the same shelf.
+		r["fefo"] = fefo_advice(r.get("batch_no"), batches) if r.get("batch_no") else None
 
 
 @frappe.whitelist(methods=["POST"])
@@ -388,6 +430,7 @@ def post_transfer(rows: str | list, submit: int | str = 0):
 def finish_count(warehouse: str, rows: str | list):
 	"""Record a count of one location: a draft Stock Reconciliation for any differences,
 	and the date it was counted (also when nothing differed)."""
+	access.require(warehouse)
 	result = create_stock_reconciliation(warehouse, rows)
 	if frappe.get_meta("Warehouse").has_field("wt_last_counted_on"):
 		frappe.db.set_value("Warehouse", warehouse, {

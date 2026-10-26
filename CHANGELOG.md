@@ -2,7 +2,44 @@
 
 ## Unreleased
 
-Upgrading: run `bench migrate` (two new Pick List fields) and `bench build`.
+Upgrading: run `bench migrate` (new Pick List and Sales Invoice fields, new settings) and `bench build`.
+
+### Picker work queue and batch picking
+
+- **Work queue in Pick:** the floor's draft Pick Lists in the order to pick them: yours first, then unassigned ones by the earliest Sales Order delivery date, then oldest. Lists someone else has are greyed with their name.
+- **Next job:** takes the top list and assigns it to you with ERPNext's own Assign To, so supervisors see who has what in the form, the list view and Operations. Opening a list also assigns it to you unless someone else has it; a list can be given back to the queue.
+- **Warehouse Scan → Batch pick:** walk up to 8 Pick Lists in one route. Each list gets a numbered, coloured tote. At each shelf take the total for all orders; the app shows how many go into which tote (a short pick fills the first totes first). Wrong items and wrong batches are caught as in Pick. **Save & submit all** saves each list's picks and submits them.
+
+### Replenishment and first-expiry-first-out picking
+
+- **Refill levels for pick shelves:** a new **Warehouse Pick Face** list (Stock Manager) sets, for one item on one shelf or floor area, *Refill at or below* and *Fill up to*, in stock units.
+- **What needs refilling:** a shelf is due when its stock, less what draft Pick Lists will still take from it, is at or below its refill level. It's **urgent** when draft picks already need more than the shelf holds. The refill brings it back up to its top level, taken from other locations of the same company: same floor first, then the batch that expires first, then the location holding the most. Reserve that can't cover a full refill is flagged.
+- **Warehouse Scan → Replenish:** the floor's refills, urgent first. Go to the suggested location, scan it, scan the item, confirm the quantity (from one or several locations), then scan the pick shelf: one Material Transfer is posted. Batch or serial items are saved as a draft to finish in ERPNext.
+- **Operations → Replenish:** the same list on the desk, with **Create transfer (draft)** for the refills you tick.
+- **FEFO in Pick:** batch items show each line's batch expiry. A line with no batch set shows which batch on that shelf to take first; scanning one that expires later asks before picking it. A line where ERPNext chose a batch expiring later than another on the same shelf is flagged.
+- Everything respects User Permissions: refills only use and show locations the user may see.
+
+### Pack and Dispatch in Warehouse Scan
+
+Two new modes finish the order flow on the floor: pick → **pack** → **dispatch**.
+
+- **Pack:** a list of picked orders waiting to be packed, oldest first. Open one, or scan its Pick List, Delivery Note or Sales Invoice. If no dispatch document exists yet, the app creates the draft in the flow set in Warehouse Theatre Settings: a Delivery Note (ERPNext's own *Create Delivery Note*) or a Sales Invoice with Update Stock on, built from the Sales Orders with only what was picked, from the shelves it was picked from (ERPNext v16 uses its own Pick List → Sales Invoice). Scan items into a carton: each scan adds one, a box barcode adds the whole box, tap a line to type a quantity. Wrong items and wrong batches are caught. **Close carton** asks for an optional weight. In the Delivery Note flow each carton is a submitted Packing Slip, so ERPNext's packed quantities stay right; in the Sales Invoice flow cartons are kept on the invoice. A carton closed by mistake can be unpacked.
+- **Carton labels:** 4×6 inch (100×150 mm) shipping labels with the customer and shipping address, carton *n of N*, units, weight, LR number and a QR code (`<document>/<carton no>`).
+- **Dispatch:** a list of orders ready to go. Scan a carton label to open its order; scanning each carton onto the vehicle ticks it off, and a carton from another order is caught. Enter the transporter, LR / AWB and vehicle number (the last transporter and vehicle are remembered) and **Dispatch** submits the Delivery Note or Sales Invoice. Unpacked lines, unscanned cartons and a missing LR number are flagged before submitting. Sales Invoices without transport fields keep them in Remarks.
+- After submitting a Pick List in Pick, **Pack it now** goes straight to packing it.
+- New settings: **Dispatch with** (Delivery Note or Sales Invoice) and **Scan every carton before dispatch**.
+- New buttons in ERPNext: **Pack with scanner** on submitted delivery Pick Lists and draft Delivery Notes / stock Sales Invoices, and **Dispatch with scanner** on the latter.
+- Warehouse Scan modes can now live in their own files (`public/js/scan/*.js`) and register with the scanner before it starts.
+
+### Per-warehouse access (User Permissions)
+
+The app now respects ERPNext **User Permissions** on Warehouse and Company everywhere it reads stock. Before, most screens read the database directly, so a user limited to one warehouse could still see every floor and all its stock.
+
+- A user limited to some warehouses (a group warehouse includes everything under it, as in ERPNext) or some companies sees only those: floors, racks and bins in 3D and 2D, the summary, heatmaps, timeline replay, item locate, capacity alerts, Stock Health, pick routes, putaway suggestions, the Operations view and Warehouse Scan (look up, labels, count queue).
+- A floor stays openable when the user has access to anything on it; racks and bins they can't see are left out.
+- Opening a warehouse or floor they can't see (from a link, a scan or the API) is refused.
+- Only permissions that apply to all doctypes (blank *Applicable For*) or to Warehouse limit the map; one set only for, say, Sales Invoice does not.
+- Writes were already safe: moves, counts, picks and packing go through ERPNext documents, which check User Permissions themselves.
 
 ### Operations view
 

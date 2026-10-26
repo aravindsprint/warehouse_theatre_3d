@@ -81,6 +81,28 @@ WarehouseTheatre3D.register(core => {
   const state = reactive({
     data: null, loading: false, error: '', days: 30, floorOnly: false, tab: null, stage: 'open', loadedKey: '',
   });
+  // Replenishment tab (api/replenish.py): loaded when first opened.
+  const rep = reactive({ data: null, loading: false, error: '', chosen: {}, posting: false, made: null, key: '' });
+  async function loadRep(force) {
+    const key = [store.company || '', floor()].join('|');
+    if (!force && rep.data && rep.key === key) return;
+    rep.loading = true; rep.error = ''; rep.made = null;
+    try {
+      rep.data = await core.api('replenish', 'get_replenishment', { company: store.company || undefined, floor: floor() || undefined });
+      rep.key = key;
+      rep.chosen = Object.fromEntries(rep.data.tasks.filter(t => t.sources.length).map(t => [t.name, true]));
+    } catch (e) { rep.error = 'Could not load refills: ' + e.message; }
+    finally { rep.loading = false; }
+  }
+  async function makeTransfer() {
+    const rows = [];
+    rep.data.tasks.filter(t => rep.chosen[t.name]).forEach(t => t.sources.forEach(s => rows.push({ item_code: t.item_code, qty: s.qty, s_warehouse: s.warehouse, t_warehouse: t.warehouse })));
+    if (!rows.length) return;
+    rep.posting = true;
+    try { rep.made = await core.api('replenish', 'create_replenishment', { rows: JSON.stringify(rows), submit: 0 }, true); }
+    catch (e) { rep.error = e.message; }
+    finally { rep.posting = false; }
+  }
   try {
     const t = localStorage.getItem('wt3d-ops-tab'); if (t) state.tab = t;
     state.floorOnly = localStorage.getItem('wt3d-ops-floor') === '1';
@@ -128,7 +150,7 @@ WarehouseTheatre3D.register(core => {
       const d = computed(() => state.data);
       const access = computed(() => (d.value && d.value.access) || {});
       const tabs = computed(() => {
-        const t = [{ id: 'me', label: 'My work' }, { id: 'orders', label: 'Orders' }];
+        const t = [{ id: 'me', label: 'My work' }, { id: 'orders', label: 'Orders' }, { id: 'replenish', label: 'Replenish' }];
         if (access.value.manager) t.push({ id: 'team', label: 'Team' });
         if (access.value.admin) t.push({ id: 'system', label: 'System' });
         return t;
@@ -138,7 +160,8 @@ WarehouseTheatre3D.register(core => {
         if (state.tab && ids.includes(state.tab)) return state.tab;
         return access.value.manager ? 'team' : 'me';
       });
-      function setTab(id) { state.tab = id; try { localStorage.setItem('wt3d-ops-tab', id); } catch (e) {} }
+      function setTab(id) { state.tab = id; try { localStorage.setItem('wt3d-ops-tab', id); } catch (e) {} if (id === 'replenish') loadRep(false); }
+      watch(tab, v => { if (v === 'replenish') loadRep(false); }, { immediate: true });
       function setFloorOnly(v) { state.floorOnly = v; try { localStorage.setItem('wt3d-ops-floor', v ? '1' : '0'); } catch (e) {} load(false); }
 
       const byName = computed(() => {
@@ -172,7 +195,7 @@ WarehouseTheatre3D.register(core => {
         return list.map(x => ({ ...x, h: Math.round(100 * x.n / max) }));
       }
 
-      return { state, store, d, access, tabs, tab, setTab, setFloorOnly, counts, orders, pick, who, hrs, pct, docUrl,
+      return { rep, loadRep, makeTransfer, state, store, d, access, tabs, tab, setTab, setFloorOnly, counts, orders, pick, who, hrs, pct, docUrl,
         shortDate, series, funnelMax, setStage, load, STAGE_LABEL, STAGE_COLOR, STAGE_HELP, TIME_LABELS,
         STAGES: ['pending', 'picked', 'packed', 'dispatched'],
         route: n => core.routes && core.routes.openFor(n),
@@ -192,7 +215,7 @@ WarehouseTheatre3D.register(core => {
                 <option :value="7">Last 7 days</option><option :value="14">Last 14 days</option>
                 <option :value="30">Last 30 days</option><option :value="90">Last 90 days</option>
               </select>
-              <button class="wtf-btn" :disabled="state.loading" @click="load(true)"><span v-if="state.loading" class="wtf-spin"></span>Refresh</button>
+              <button class="wtf-btn" :disabled="state.loading" @click="load(true); if (tab==='replenish') loadRep(true)"><span v-if="state.loading" class="wtf-spin"></span>Refresh</button>
             </div>
           </div>
 
@@ -300,6 +323,43 @@ WarehouseTheatre3D.register(core => {
                 </tbody>
               </table></div>
               <div class="wth-note" style="margin-top:10px">“Picked by” is whoever submitted the Pick List (recorded from this version on; “?” for older lists). Delivery Note flow: packed = a submitted Packing Slip on a draft Delivery Note. Sales Invoice flow (Update Stock on): packed = a draft invoice, dispatched = submitted.</div>
+            </template>
+
+            <!-- ───────── Replenish ───────── -->
+            <template v-else-if="tab==='replenish'">
+              <div v-if="rep.error" class="wtf-err" role="alert">{{rep.error}}</div>
+              <div v-if="rep.loading && !rep.data" class="wth-load"><span class="wtf-spin"></span> Checking pick shelves…</div>
+              <template v-else-if="rep.data">
+                <div class="wth-cards">
+                  <div :class="['wth-card', rep.data.urgent ? 'bad' : 'ok']"><div class="wth-cl">Urgent</div><div class="wth-cv">{{rep.data.urgent}}</div><div class="wth-cd">Draft Pick Lists need more than the shelf holds</div></div>
+                  <div :class="['wth-card', rep.data.tasks.length ? 'warn' : 'ok']"><div class="wth-cl">Due for refill</div><div class="wth-cv">{{rep.data.tasks.length}}</div><div class="wth-cd">At or below their refill level</div></div>
+                  <div class="wth-card info"><div class="wth-cl">Pick shelves set up</div><div class="wth-cv">{{rep.data.faces}}</div><div class="wth-cd">Items with refill levels on a shelf</div></div>
+                </div>
+                <div v-if="!rep.data.faces" class="wth-note">No refill levels yet. For each item's pick shelf, add a <b>Warehouse Pick Face</b> with “Refill at or below” and “Fill up to”.
+                  <a v-if="rep.data.can_setup" class="wtf-link" href="/app/warehouse-pick-face/new" target="_blank" rel="noopener">Add one ↗</a></div>
+                <template v-else>
+                  <div class="wth-note">Refills take stock from other locations of the same company: same floor first, then the batch expiring first, then the location holding the most. Pickers can also do these in Warehouse Scan → Replenish.</div>
+                  <div class="wth-tw"><table class="wth-t" style="min-width:820px">
+                    <thead><tr><th></th><th>Item</th><th>Pick shelf</th><th class="r">On shelf</th><th class="r">To pick</th><th class="r">Refill at / to</th><th class="r">Bring</th><th>From</th></tr></thead>
+                    <tbody>
+                      <tr v-for="x in rep.data.tasks" :key="x.name">
+                        <td><input type="checkbox" v-model="rep.chosen[x.name]" :disabled="!x.sources.length" :aria-label="'Refill ' + x.item_code"/></td>
+                        <td><div class="wth-code">{{x.item_code}} <span v-if="x.urgent" class="wth-chip bad">urgent</span></div><div class="wth-name">{{x.item_name}}</div></td>
+                        <td>{{x.path}}</td>
+                        <td class="r">{{x.on_hand}}</td><td class="r">{{x.pending || '—'}}</td>
+                        <td class="r">{{x.min_qty}} / {{x.max_qty}}</td>
+                        <td class="r"><b>{{x.need}}</b> {{x.stock_uom}}<div v-if="x.short" class="wth-chip warn">{{x.short}} short</div></td>
+                        <td><div v-for="s in x.sources" :key="s.warehouse" class="wto-who">{{s.qty}} from {{s.path}}<span v-if="s.expiry" class="wto-muted"> · exp {{s.expiry}}</span></div><span v-if="!x.sources.length" class="wth-chip bad">no reserve</span></td>
+                      </tr>
+                      <tr v-if="!rep.data.tasks.length"><td colspan="8" class="wth-empty">Every pick shelf is above its refill level. 👍</td></tr>
+                    </tbody>
+                  </table></div>
+                  <div v-if="rep.data.tasks.length" style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+                    <button class="wtf-btn wtf-btn-pri" :disabled="rep.posting || !Object.values(rep.chosen).some(Boolean)" @click="makeTransfer"><span v-if="rep.posting" class="wtf-spin"></span>Create transfer (draft)</button>
+                    <span v-if="rep.made" class="wtf-ok">Draft {{rep.made.name}} with {{rep.made.rows}} lines. <a class="wtf-link" :href="rep.made.url" target="_blank" rel="noopener">Open ↗</a></span>
+                  </div>
+                </template>
+              </template>
             </template>
 
             <!-- ───────── Team ───────── -->
