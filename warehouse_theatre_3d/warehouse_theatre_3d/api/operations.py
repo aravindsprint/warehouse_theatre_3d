@@ -7,6 +7,7 @@ and saved as drafts unless the user explicitly asks to submit a simple transfer.
 import copy
 
 import frappe
+from frappe import _
 from frappe.utils import nowdate
 
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access
@@ -40,7 +41,7 @@ def _item_flags(item_code):
 		"Item", item_code, ["name", "stock_uom", "has_batch_no", "has_serial_no", "is_stock_item"], as_dict=True
 	)
 	if not item:
-		frappe.throw(f"Item {item_code} not found")
+		frappe.throw(_("Item {0} not found").format(item_code))
 	return item
 
 
@@ -48,17 +49,17 @@ def _company_of(*warehouses):
 	companies = {frappe.db.get_value("Warehouse", w, "company") for w in warehouses if w}
 	companies.discard(None)
 	if len(companies) != 1:
-		frappe.throw("Both warehouses must belong to the same company.")
+		frappe.throw(_("Both warehouses must belong to the same company."))
 	return companies.pop()
 
 
 @frappe.whitelist()
-def get_bin_stock(warehouse):
+def get_bin_stock(warehouse: str):
 	"""Every item in one Bin (the floor view only carries the top 20 per level),
 	with batch/serial flags so the UI can say which items need finishing in desk."""
 	_require_view_permission()
 	if not frappe.db.exists("Warehouse", warehouse):
-		frappe.throw(f"Warehouse {warehouse} not found")
+		frappe.throw(_("Warehouse {0} not found").format(warehouse))
 	access.require(warehouse)
 	items = frappe.db.sql(
 		"""
@@ -83,7 +84,7 @@ def get_bin_stock(warehouse):
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist(methods=["POST"])
-def create_material_transfer(item_code, qty, s_warehouse, t_warehouse, submit=0):
+def create_material_transfer(item_code: str, qty: float | str, s_warehouse: str, t_warehouse: str, submit: int | str = 0):
 	"""Create a Material Transfer Stock Entry between two Bins.
 
 	Saved as a draft by default. `submit=1` is honoured only for items without batch or
@@ -108,7 +109,7 @@ def create_material_transfer(item_code, qty, s_warehouse, t_warehouse, submit=0)
 
 
 @frappe.whitelist(methods=["POST"])
-def create_putaway_transfer(rows):
+def create_putaway_transfer(rows: str | list | dict):
 	"""One draft Material Transfer covering every line of a putaway plan.
 
 	rows: [{"item_code", "qty", "s_warehouse", "t_warehouse"}]. Always a draft, so the
@@ -130,7 +131,7 @@ def _build_transfer(rows, remarks="Created from Warehouse Theatre 3D"):
 	"""Unsaved Material Transfer Stock Entry for the given rows.
 	Returns (doc, any_item_is_batch_or_serial_tracked)."""
 	if not rows:
-		frappe.throw("Nothing to transfer.")
+		frappe.throw(_("Nothing to transfer."))
 	companies = set()
 	tracked = False
 	se = frappe.new_doc("Stock Entry")
@@ -141,14 +142,14 @@ def _build_transfer(rows, remarks="Created from Warehouse Theatre 3D"):
 		qty = _flt(r.get("qty"))
 		s_wh, t_wh = r.get("s_warehouse"), r.get("t_warehouse")
 		if qty <= 0:
-			frappe.throw("Quantity must be greater than zero.")
+			frappe.throw(_("Quantity must be greater than zero."))
 		if not s_wh or not t_wh:
-			frappe.throw("Every line needs a source and a target warehouse.")
+			frappe.throw(_("Every line needs a source and a target warehouse."))
 		if s_wh == t_wh:
-			frappe.throw("Source and target bin are the same.")
+			frappe.throw(_("Source and target bin are the same."))
 		for wh in (s_wh, t_wh):
 			if not frappe.db.exists("Warehouse", wh):
-				frappe.throw(f"Warehouse {wh} not found")
+				frappe.throw(_("Warehouse {0} not found").format(wh))
 		companies.add(_company_of(s_wh, t_wh))
 		item = _item_flags(r.get("item_code"))
 		tracked = tracked or bool(item.has_batch_no or item.has_serial_no)
@@ -162,7 +163,7 @@ def _build_transfer(rows, remarks="Created from Warehouse Theatre 3D"):
 			"t_warehouse": t_wh,
 		})
 	if len(companies) != 1:
-		frappe.throw("All lines must belong to the same company.")
+		frappe.throw(_("All lines must belong to the same company."))
 	se.company = companies.pop()
 	return se, tracked
 
@@ -172,7 +173,7 @@ def _build_transfer(rows, remarks="Created from Warehouse Theatre 3D"):
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist(methods=["POST"])
-def create_stock_reconciliation(warehouse, rows):
+def create_stock_reconciliation(warehouse: str, rows: str | list | dict):
 	"""Draft Stock Reconciliation for one Bin from counted quantities.
 
 	rows: [{"item_code": ..., "qty": counted_qty}]. Only rows whose count differs from
@@ -183,7 +184,7 @@ def create_stock_reconciliation(warehouse, rows):
 	access.require(warehouse)
 	rows = parse_json(rows, []) or []
 	if not frappe.db.exists("Warehouse", warehouse):
-		frappe.throw(f"Warehouse {warehouse} not found")
+		frappe.throw(_("Warehouse {0} not found").format(warehouse))
 	company = frappe.db.get_value("Warehouse", warehouse, "company")
 
 	current = {
@@ -206,7 +207,7 @@ def create_stock_reconciliation(warehouse, rows):
 			continue
 		counted = _flt(r.get("qty"))
 		if counted < 0:
-			frappe.throw(f"Counted quantity for {code} cannot be negative.")
+			frappe.throw(_("Counted quantity for {0} cannot be negative.").format(code))
 		item = _item_flags(code)
 		if item.has_batch_no or item.has_serial_no:
 			skipped.append(code)
@@ -338,14 +339,14 @@ def _dock_position(floor, bins):
 
 
 @frappe.whitelist()
-def get_floor_meta(group_warehouse):
+def get_floor_meta(group_warehouse: str):
 	_require_view_permission()
 	access.require_floor(group_warehouse)
 	return {"dock_slot": frappe.db.get_value("Warehouse", group_warehouse, "wt_dock_slot")}
 
 
 @frappe.whitelist(methods=["POST"])
-def save_dock(group_warehouse, slot_warehouse=None):
+def save_dock(group_warehouse: str, slot_warehouse: str | None = None):
 	"""Remember which Slot is next to the receiving dock (used by putaway and routes)."""
 	_require_edit_permission()
 	access.require_floor(group_warehouse)
@@ -353,7 +354,7 @@ def save_dock(group_warehouse, slot_warehouse=None):
 	on_floor = slot_warehouse == group_warehouse or \
 		frappe.db.get_value("Warehouse", slot_warehouse, "parent_warehouse") == group_warehouse
 	if slot_warehouse and not on_floor:
-		frappe.throw("The dock slot must be on this floor.")
+		frappe.throw(_("The dock slot must be on this floor."))
 	frappe.db.set_value("Warehouse", group_warehouse, "wt_dock_slot", slot_warehouse or None)
 	return {"ok": True, "dock_slot": slot_warehouse}
 
@@ -367,11 +368,11 @@ RECEIPT_SOURCES = {
 
 
 @frappe.whitelist()
-def get_receipt_items(doctype, name):
+def get_receipt_items(doctype: str, name: str):
 	"""Items received on a document, as putaway requests in stock UOM."""
 	_require_view_permission()
 	if doctype not in RECEIPT_SOURCES:
-		frappe.throw(f"Putaway from {doctype} is not supported.")
+		frappe.throw(_("Putaway from {0} is not supported.").format(doctype))
 	doc = frappe.get_doc(doctype, name)
 	doc.check_permission("read")
 	child, qty_field, wh_field = RECEIPT_SOURCES[doctype]
@@ -390,7 +391,7 @@ def get_receipt_items(doctype, name):
 
 
 @frappe.whitelist()
-def get_putaway_plan(group_warehouse, items):
+def get_putaway_plan(group_warehouse: str, items: str | list | dict):
 	"""Rank Bins on one Floor for each item to put away. See plan_putaway()."""
 	_require_view_permission()
 	items = parse_json(items, []) or []
@@ -407,7 +408,7 @@ def get_putaway_plan(group_warehouse, items):
 			"from_warehouse": it.get("from_warehouse"),
 		})
 	if not requests:
-		frappe.throw("Add at least one item with a quantity.")
+		frappe.throw(_("Add at least one item with a quantity."))
 
 	access.require_floor(group_warehouse)
 	bins = access.keep(get_floor_bins(group_warehouse), access.allowed_warehouses(), "wh")

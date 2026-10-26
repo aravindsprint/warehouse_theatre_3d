@@ -1,4 +1,5 @@
 import frappe
+from frappe import _
 import json
 
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access
@@ -14,7 +15,7 @@ def _require_view_permission():
 	user_roles = set(frappe.get_roles())
 	if not (user_roles & VIEW_ROLES):
 		frappe.throw(
-			"You do not have permission to view Warehouse Theatre 3D.",
+			_("You do not have permission to view Warehouse Theatre 3D."),
 			frappe.PermissionError
 		)
 
@@ -24,8 +25,8 @@ def _require_edit_permission():
 	user_roles = set(frappe.get_roles())
 	if not (user_roles & EDIT_ROLES):
 		frappe.throw(
-			"You do not have permission to edit Warehouse Theatre 3D. "
-			"Only System Manager can edit floor plans, slot configuration, or UOM capacities.",
+			_("You do not have permission to edit Warehouse Theatre 3D. "
+			"Only System Manager can edit floor plans, slot configuration, or UOM capacities."),
 			frappe.PermissionError
 		)
 
@@ -48,7 +49,7 @@ def get_companies():
 
 
 @frappe.whitelist(allow_guest=False)
-def get_warehouse_groups(company=None):
+def get_warehouse_groups(company: str | None = None):
 	"""Return all Floor warehouses grouped under their Building."""
 	_require_view_permission()
 	# Filters on Warehouse.company rather than the "- ABBR" name suffix, which breaks
@@ -97,7 +98,7 @@ ZONE_LEVEL_LABEL = 'Floor stack'
 
 
 @frappe.whitelist(allow_guest=False)
-def get_slots(group_warehouse):
+def get_slots(group_warehouse: str):
 	"""Racks (Slot warehouses with their Bin levels) and floor-storage Zones on a Floor.
 
 	A Zone is drawn as a floor stack and carries a single "level": itself, since the
@@ -122,7 +123,7 @@ def get_slots(group_warehouse):
 
 
 @frappe.whitelist(allow_guest=False)
-def get_all_slots(group_warehouse):
+def get_all_slots(group_warehouse: str):
 	"""All Slots and Zones on a Floor, for the floor plan editor."""
 	_require_view_permission()
 	access.require_floor(group_warehouse)
@@ -240,7 +241,7 @@ def _get_items(level_wh):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def save_slot_position(warehouse, row, col, row_gap=0, span=None):
+def save_slot_position(warehouse: str, row: int | str, col: int | str, row_gap: float | str = 0, span: int | str | None = None):
 	_require_edit_permission()
 	access.require(warehouse)
 	values = {
@@ -256,7 +257,7 @@ def save_slot_position(warehouse, row, col, row_gap=0, span=None):
 
 
 @frappe.whitelist(allow_guest=False)
-def get_floor_layout(group_warehouse):
+def get_floor_layout(group_warehouse: str):
 	"""Return the saved Floor Plan editor grid (rows/cells incl. span & aisle flags) for a Floor.
 
 	This is purely editor metadata - it does not drive the 3D scene (which reads
@@ -276,7 +277,7 @@ def get_floor_layout(group_warehouse):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def save_floor_layout(group_warehouse, layout):
+def save_floor_layout(group_warehouse: str, layout: str | list | dict):
 	"""Persist the Floor Plan editor grid as JSON on the Floor warehouse."""
 	_require_edit_permission()
 	access.require_floor(group_warehouse)
@@ -287,7 +288,7 @@ def save_floor_layout(group_warehouse, layout):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def save_stack_config(slot_warehouse, levels):
+def save_stack_config(slot_warehouse: str, levels: str | list | dict):
 	_require_edit_permission()
 	access.require(slot_warehouse)
 	if isinstance(levels, str):
@@ -320,7 +321,7 @@ def save_stack_config(slot_warehouse, levels):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def save_uom_capacity(warehouse, uom, capacity):
+def save_uom_capacity(warehouse: str, uom: str, capacity: float | str):
 	_require_edit_permission()
 	access.require(warehouse)
 	# Check if row already exists
@@ -375,7 +376,21 @@ def get_user_access():
 		"can_edit": bool(user_roles & EDIT_ROLES),
 		"setup_complete": bool(frappe.db.exists("Warehouse", {"wt_warehouse_type": ["is", "set"]})),
 		"access": access.describe(),
+		**_ui_messages(),
 	}
+
+
+def _ui_messages():
+	"""The user's language and this app's translations for it (Warehouse Scan has no desk JS
+	to load them). Strings live in warehouse_theatre_3d/translations/<lang>.csv."""
+	lang = getattr(frappe.local, "lang", None) or "en"
+	if lang.startswith("en"):
+		return {"lang": lang, "messages": {}}
+	try:
+		from frappe.translate import get_translations_from_apps
+		return {"lang": lang, "messages": get_translations_from_apps(lang, apps=["warehouse_theatre_3d"]) or {}}
+	except Exception:
+		return {"lang": lang, "messages": {}}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -395,7 +410,7 @@ def get_uom_list():
 
 
 @frappe.whitelist(allow_guest=False)
-def get_parent_warehouse_options(wt_warehouse_type, company=None):
+def get_parent_warehouse_options(wt_warehouse_type: str, company: str | None = None):
 	"""Valid parents for a given Warehouse Type (Theatre): one theatre level up.
 	Building's valid parent is the company's root warehouse (e.g. 'All Warehouses - ABBR')."""
 	_require_view_permission()
@@ -423,7 +438,7 @@ def get_parent_warehouse_options(wt_warehouse_type, company=None):
 
 
 @frappe.whitelist(allow_guest=False)
-def get_warehouse_manage_list(company=None):
+def get_warehouse_manage_list(company: str | None = None):
 	"""Full warehouse list (all theatre roles, incl. disabled) for the Manage Warehouses panel."""
 	_require_edit_permission()
 	filters = {}
@@ -439,7 +454,7 @@ def get_warehouse_manage_list(company=None):
 
 
 @frappe.whitelist(allow_guest=False)
-def get_warehouse_detail(warehouse):
+def get_warehouse_detail(warehouse: str):
 	"""Full field set for the edit form, incl. the WT UOM Capacities child table."""
 	_require_edit_permission()
 	access.require(warehouse)
@@ -465,18 +480,18 @@ def get_warehouse_detail(warehouse):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def create_warehouse(data):
+def create_warehouse(data: str | list | dict):
 	_require_edit_permission()
 	if isinstance(data, str):
 		data = json.loads(data)
 
 	warehouse_name = (data.get('warehouse_name') or '').strip()
 	if not warehouse_name:
-		frappe.throw('Warehouse Name is required.')
+		frappe.throw(_('Warehouse Name is required.'))
 
 	wt_type = data.get('wt_warehouse_type')
 	if wt_type not in WT_TYPES:
-		frappe.throw('A valid Warehouse Type (Theatre) is required: Building, Floor, Slot, Bin or Zone.')
+		frappe.throw(_('A valid Warehouse Type (Theatre) is required: Building, Floor, Slot, Bin or Zone.'))
 
 	is_group = data.get('is_group')
 	is_group = _int(is_group) if is_group is not None else _default_is_group(wt_type)
@@ -505,7 +520,7 @@ def create_warehouse(data):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def update_warehouse(warehouse, data):
+def update_warehouse(warehouse: str, data: str | list | dict):
 	_require_edit_permission()
 	access.require(warehouse)
 	if isinstance(data, str):
@@ -544,14 +559,14 @@ def update_warehouse(warehouse, data):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
-def delete_warehouse(warehouse):
+def delete_warehouse(warehouse: str):
 	"""Hard-delete when safe; falls back to disabling when the warehouse has
 	stock/transaction history (Frappe would raise LinkExistsError on delete)."""
 	_require_edit_permission()
 	access.require(warehouse)
 
 	if frappe.db.exists('Warehouse', {'parent_warehouse': warehouse}):
-		frappe.throw('This warehouse has child warehouses. Delete or reassign them first.')
+		frappe.throw(_('This warehouse has child warehouses. Delete or reassign them first.'))
 
 	# Undo only the failed delete (savepoint), not the whole request.
 	frappe.db.savepoint("wt_delete_warehouse")

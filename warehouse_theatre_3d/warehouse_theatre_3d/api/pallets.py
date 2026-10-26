@@ -10,6 +10,7 @@ there is enough at the pallet's location first.
 import frappe
 from frappe import _
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api.offline import replay_safe
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import _flt, _require_view_permission, parse_json
 from warehouse_theatre_3d.warehouse_theatre_3d.api.links import resolve_locations
@@ -79,6 +80,7 @@ def get_pallet(name: str):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def save_pallet(warehouse: str, contents: str | list, name: str | None = None, note: str | None = None):
 	"""Create a pallet at a location (or replace an existing pallet's contents)."""
 	_require_view_permission()
@@ -106,6 +108,7 @@ def save_pallet(warehouse: str, contents: str | list, name: str | None = None, n
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def move_pallet(name: str, target: str, submit: int | str = 1):
 	"""Move everything on a pallet to another location with one Material Transfer."""
 	_require_view_permission()
@@ -143,6 +146,7 @@ def move_pallet(name: str, target: str, submit: int | str = 1):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def empty_pallet(name: str):
 	"""The pallet was broken up: keep the record, clear its contents."""
 	_require_view_permission()

@@ -30,6 +30,7 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 
 import frappe
+from frappe import _
 from frappe.utils import add_days, getdate, now_datetime, nowdate
 
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access
@@ -619,13 +620,13 @@ def _serialise(o, can_see):
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist(allow_guest=False)
-def get_operations(company=None, days=30, floor=None, refresh=0):
+def get_operations(company: str | None = None, days: int | str = 30, floor: str | None = None, refresh: int | str = 0):
 	"""Everything the Operations view shows. Every view role gets Orders and My work;
 	Stock Managers and System Managers also get Team; System Managers also get System.
 	Cached for two minutes per user and filter."""
 	_require_view_permission()
 	if not frappe.has_permission("Pick List", "read"):
-		frappe.throw("You need read access to Pick Lists to see fulfillment status.", frappe.PermissionError)
+		frappe.throw(_("You need read access to Pick Lists to see fulfillment status."), frappe.PermissionError)
 	days = max(1, min(_int(days) or 30, 180))
 	user = frappe.session.user
 	key = f"wt3d:operations:{user}:{company or ''}:{days}:{floor or ''}"

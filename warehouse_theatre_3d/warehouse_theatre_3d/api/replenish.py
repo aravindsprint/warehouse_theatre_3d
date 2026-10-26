@@ -17,6 +17,7 @@ import frappe
 from frappe import _
 from frappe.utils import nowdate
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api.offline import replay_safe
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	_flt,
@@ -261,6 +262,7 @@ def get_replenishment(company: str | None = None, floor: str | None = None):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def create_replenishment(rows: str | list, submit: int | str = 0):
 	"""One Material Transfer for the chosen refills. rows: [{"item_code", "qty",
 	"s_warehouse", "t_warehouse"}]. Submitted when asked and nothing needs a batch or

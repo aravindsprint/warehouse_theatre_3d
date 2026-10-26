@@ -12,6 +12,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, nowdate
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api.offline import replay_safe
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import _flt, _int, _require_view_permission, get_floor_bins, parse_json
 from warehouse_theatre_3d.warehouse_theatre_3d.api.operations import (
@@ -156,6 +157,7 @@ def get_slotting(floor: str, days: int = 90):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def create_moves(moves: str | list):
 	"""One draft Material Transfer for the chosen moves (both directions for a swap)."""
 	_require_view_permission()

@@ -84,7 +84,7 @@ def classify_movement(items, moves, days, today, slow_cover_days=SLOW_COVER_DAYS
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
-def get_stock_health(company=None, days=90, expiry_days=60, refresh=0):
+def get_stock_health(company: str | None = None, days: int | str = 90, expiry_days: int | str = 60, refresh: int | str = 0):
 	"""Everything the Stock Health page shows, for one company or all.
 
 	days: period for dead stock / slow movers. expiry_days: how far ahead to look for

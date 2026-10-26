@@ -34,6 +34,10 @@ class TestLiveFlows(FrappeTestCase):
 	def setUpClass(cls):
 		super().setUpClass()
 		frappe.set_user("Administrator")
+		if not frappe.db.a_row_exists("Company"):
+			# `run-tests --app` runs only this app's before_tests; ERPNext's sets up a company.
+			from erpnext.setup.utils import before_tests
+			before_tests()
 		cls.company = frappe.db.get_single_value("Global Defaults", "default_company") or frappe.get_all("Company", pluck="name")[0]
 		cls.abbr = frappe.db.get_value("Company", cls.company, "abbr")
 		root = frappe.db.get_value("Warehouse", {"company": cls.company, "is_group": 1, "parent_warehouse": ["in", ["", None]]}, "name")
@@ -325,3 +329,21 @@ class TestLiveFlows(FrappeTestCase):
 			frappe.set_user("Administrator")
 			frappe.local.wt3d_allowed_wh = "unset"
 			frappe.local.wt3d_navigable_wh = "unset"
+
+	# ── offline replay ─────────────────────────────────────
+
+	def test_10_replay_is_safe(self):
+		from unittest.mock import patch
+
+		from warehouse_theatre_3d.warehouse_theatre_3d.api import offline
+		item = f"{PREFIX}-ITEM-O"
+		self.make_item(item)
+		self.receive_item(item, self.b1, 10)
+		rows = [{"item_code": item, "qty": 3, "s_warehouse": self.b1, "t_warehouse": self.a2}]
+		with patch.object(offline, "client_id", return_value="testreplay0001"):
+			first = scan.post_transfer(rows, submit=1)
+			frappe.db.commit()   # the remembered result is stored after commit
+			again = scan.post_transfer(rows, submit=1)
+		self.assertEqual(first["name"], again["name"])
+		self.assertAlmostEqual(self.qty(item, self.a2), 3)
+		self.assertAlmostEqual(self.qty(item, self.b1), 7)

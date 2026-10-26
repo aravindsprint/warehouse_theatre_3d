@@ -95,6 +95,7 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.packing import (  # noqa: E40
 	parse_carton,
 )
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.notify import describe, fresh, stuck_orders  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.pallets import merge_contents, shortfalls  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.slotting import abc_classes, location_cost, suggest_moves  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.inbound import receipt_plan, return_plan  # noqa: E402
@@ -703,6 +704,27 @@ class TestPallets(unittest.TestCase):
 		contents = [{"item_code": "A", "qty": 5}, {"item_code": "A", "qty": 1}, {"item_code": "B", "qty": 2}]
 		self.assertEqual(shortfalls(contents, {"A": 6, "B": 1}), [{"item_code": "B", "need": 2, "have": 1}])
 		self.assertEqual(shortfalls(contents, {"A": 6, "B": 2}), [])
+
+
+class TestNotify(unittest.TestCase):
+	def test_stuck_and_fresh(self):
+		orders = [{"name": "a", "stage": "picked", "hours_in_stage": 30}, {"name": "b", "stage": "dispatched", "hours_in_stage": 90},
+		          {"name": "c", "stage": "pending", "hours_in_stage": 50}, {"name": "d", "stage": "packed", "hours_in_stage": 2}]
+		stuck = stuck_orders(orders, 24)
+		self.assertEqual([o["name"] for o in stuck], ["c", "a"])
+		seen = {"stuck:c:pending"}
+		self.assertEqual([o["name"] for o in fresh(stuck, lambda o: f"stuck:{o['name']}:{o['stage']}", seen.__contains__)], ["a"])
+
+	def test_describe(self):
+		subj, lines = describe("stuck", [{"name": f"PL-{i}", "stage": "picked", "hours_in_stage": 30, "customer": "C"} for i in range(7)])
+		self.assertEqual(subj, "7 orders stuck in picking, packing or dispatch")
+		self.assertEqual(lines[0], "PL-0 · C: picked for 30 h")
+		self.assertEqual(lines[-1], "…and 2 more")
+		subj, _ = describe("refill", [{"item_code": "A", "warehouse": "W", "on_hand": 1, "pending": 3}])
+		self.assertEqual(subj, "1 pick shelf needs an urgent refill")
+		self.assertEqual(describe("refill", [{"item_code": "A", "warehouse": "W", "on_hand": 1, "pending": 3}] * 2)[0], "2 pick shelves need an urgent refill")
+		subj, lines = describe("expiry", [{"batch_no": "B1", "item_code": "A", "days_left": -1, "expiry_date": "2026-10-01"}])
+		self.assertEqual((subj, lines), ("1 batch expires soon", ["B1 (A): expired 2026-10-01"]))
 
 
 if __name__ == "__main__":
