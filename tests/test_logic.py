@@ -85,6 +85,7 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.fulfillment import (  # noqa:
 	summarise_hours,
 	team_view,
 )
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.health import (  # noqa: E402
 	bucket_index,
 	classify_movement,
@@ -446,6 +447,64 @@ class TestFulfillment(unittest.TestCase):
 		self.assertEqual(team["stuck"], ["PL-3"])
 		self.assertEqual(team["pickers"][0]["user"], "picker@x.com")
 		self.assertEqual(team["accuracy"]["percent"], 50)
+
+
+class TestAccess(unittest.TestCase):
+	PERMS = {
+		"Warehouse": [{"doc": "Main - P", "applicable_for": None}, {"doc": "Rack A - P", "applicable_for": None},
+		              {"doc": "Shop - P", "applicable_for": "Sales Invoice"}],
+		"Company": [{"doc": "Pranera", "applicable_for": ""}],
+		"Customer": [{"doc": "C1", "applicable_for": None}],
+	}
+
+	def test_restricted_values(self):
+		self.assertEqual(access.restricted_values(self.PERMS, "Warehouse"), {"Main - P", "Rack A - P"})
+		self.assertEqual(access.restricted_values(self.PERMS, "Company"), {"Pranera"})
+		self.assertIsNone(access.restricted_values(self.PERMS, "Item"))
+		# Only "for Sales Invoice": doesn't limit what the map shows.
+		self.assertIsNone(access.restricted_values({"Warehouse": [{"doc": "X", "applicable_for": "Sales Invoice"}]}, "Warehouse"))
+		self.assertIsNone(access.restricted_values({}, "Warehouse"))
+
+	def test_combine_and_keep(self):
+		company = {"A": "Pranera", "B": "Other", "C": "Pranera"}
+		self.assertEqual(access.combine(["A", "B", "C"], company, {"A", "B"}, None), {"A", "B"})
+		self.assertEqual(access.combine(["A", "B", "C"], company, None, {"Pranera"}), {"A", "C"})
+		self.assertEqual(access.combine(["A", "B", "C"], company, {"A", "B"}, {"Pranera"}), {"A"})
+		rows = [{"warehouse": "A"}, {"warehouse": "B"}]
+		self.assertEqual(access.keep(rows, None), rows)
+		self.assertEqual(access.keep(rows, {"B"}), [{"warehouse": "B"}])
+		self.assertEqual(access.keep([{"wh": "A"}], set(), "wh"), [])
+
+	def test_sql_params(self):
+		self.assertEqual(access.sql_params(None), {"wh_all": 1, "wh_list": ("",)})
+		self.assertEqual(access.sql_params({"B", "A"}), {"wh_all": 0, "wh_list": ("A", "B")})
+		self.assertEqual(access.sql_params(set()), {"wh_all": 0, "wh_list": ("",)})
+
+	def test_allowed_warehouses_with_site(self):
+		import frappe
+		mod = types.ModuleType("frappe.core.doctype.user_permission.user_permission")
+		mod.get_user_permissions = lambda user: self.PERMS
+		saved = {k: getattr(frappe, k, None) for k in ("session", "local")}
+		saved_sql = getattr(frappe.db, "sql", None)
+		sys.modules["frappe.core.doctype.user_permission.user_permission"] = mod
+		try:
+			frappe.session = types.SimpleNamespace(user="picker@x.com")
+			frappe.local = types.SimpleNamespace()
+			frappe.db.sql = lambda q, p=None, as_dict=False: [
+				types.SimpleNamespace(name="Main - P", company="Pranera"),
+				types.SimpleNamespace(name="Rack A - P", company="Other")]
+			self.assertEqual(access.allowed_warehouses(), {"Main - P"})
+			self.assertTrue(access.can_see("Main - P"))
+			self.assertFalse(access.can_see("Rack A - P"))
+			with self.assertRaises(PermissionError):
+				access.require("Rack A - P")
+			frappe.session.user, frappe.local = "Administrator", types.SimpleNamespace()
+			self.assertIsNone(access.allowed_warehouses())
+		finally:
+			for k, v in saved.items():
+				setattr(frappe, k, v)
+			frappe.db.sql = saved_sql
+			sys.modules.pop("frappe.core.doctype.user_permission.user_permission", None)
 
 
 if __name__ == "__main__":
