@@ -284,6 +284,8 @@ def start_pack(pick_list: str | None = None, doctype: str | None = None, name: s
 		return pack_state(doctype, name)
 	if not pick_list:
 		frappe.throw(_("Scan a Pick List, Delivery Note or Sales Invoice."))
+	if not frappe.has_permission("Pick List", "read", pick_list):
+		frappe.throw(_("You can't open Pick List {0}.").format(pick_list), frappe.PermissionError)
 	docs = _drafts_for(pick_list)
 	drafts = [(dt, n) for dt, n, ds in docs if ds == 0]
 	if drafts:
