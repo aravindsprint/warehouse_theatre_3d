@@ -37,7 +37,7 @@ doctype_js = {
     dt: "public/js/wt3d_forms.js"
     for dt in (
         "Item", "Warehouse", "Stock Entry", "Purchase Receipt", "Purchase Invoice",
-        "Subcontracting Receipt", "Delivery Note", "Sales Invoice", "Pick List", "Material Request",
+        "Subcontracting Receipt", "Delivery Note", "Sales Invoice", "Pick List", "Material Request", "Purchase Order",
     )
 }
 

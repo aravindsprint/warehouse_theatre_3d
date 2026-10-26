@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-title" content="Warehouse Scan"/>
   <link rel="apple-touch-icon" href="/assets/warehouse_theatre_3d/icons/scan-apple-touch-icon.png"/>
-  <link rel="stylesheet" href="/assets/warehouse_theatre_3d/css/wt-scan.css?v=1"/>
+  <link rel="stylesheet" href="/assets/warehouse_theatre_3d/css/wt-scan.css?v=2"/>
 </head>
 <body>
   <div id="wt-scan-root"></div>
@@ -26,7 +26,12 @@
     }
   </script>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-  <script src="/assets/warehouse_theatre_3d/js/scan/wt-scan.js?v=1"></script>
+  <script src="/assets/warehouse_theatre_3d/js/scan/wt-scan.js?v=2"></script>
+  <!-- Modes in their own files register with the scanner before it mounts. -->
+  <script src="/assets/warehouse_theatre_3d/js/scan/pack.js?v=2"></script>
+  <script src="/assets/warehouse_theatre_3d/js/scan/replenish.js?v=2"></script>
+  <script src="/assets/warehouse_theatre_3d/js/scan/batch.js?v=2"></script>
+  <script src="/assets/warehouse_theatre_3d/js/scan/inbound.js?v=2"></script>
   <script>
     if (window.WarehouseScan) window.WarehouseScan.mount('#wt-scan-root');
   </script>
