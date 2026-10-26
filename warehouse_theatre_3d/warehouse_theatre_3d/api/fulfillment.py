@@ -368,29 +368,39 @@ def _has(doctype, field):
 
 
 def _pick_lists(company, days, floor):
-	extra = ", ".join(f"pl.{f}" for f in ("wt_picked_by", "wt_picked_at") if _has("Pick List", f))
-	floor_join, p = "", {"company": company or None, "from": add_days(nowdate(), -days), "limit": MAX_ORDERS}
+	p = {"company": company or None, "from": add_days(nowdate(), -days), "limit": MAX_ORDERS,
+	     "any_floor": 1, "whs": ("",)}
 	if floor:
 		whs = [b.wh for b in get_floor_bins(floor)]
 		if not whs:
 			return []
-		p["whs"] = tuple(whs)
-		floor_join = "AND EXISTS (SELECT 1 FROM `tabPick List Item` f WHERE f.parent = pl.name AND f.warehouse IN %(whs)s)"
-	return frappe.db.sql(
-		f"""
+		p.update(any_floor=0, whs=tuple(whs))
+	lists = frappe.db.sql(
+		"""
 		SELECT pl.name, pl.docstatus, pl.status, pl.customer, pl.company, pl.creation, pl.modified,
-		       pl.owner, pl._assign, IFNULL(pl.scan_mode, 0) AS scan_mode{', ' + extra if extra else ''}
+		       pl.owner, pl._assign, IFNULL(pl.scan_mode, 0) AS scan_mode
 		FROM `tabPick List` pl
 		WHERE pl.purpose = 'Delivery' AND pl.docstatus < 2
 		  AND (pl.docstatus = 0 OR pl.creation >= %(from)s)
 		  AND (%(company)s IS NULL OR pl.company = %(company)s)
-		  {floor_join}
+		  AND (%(any_floor)s = 1 OR EXISTS (
+		        SELECT 1 FROM `tabPick List Item` f WHERE f.parent = pl.name AND f.warehouse IN %(whs)s))
 		ORDER BY pl.creation DESC
 		LIMIT %(limit)s
 		""",
 		p,
 		as_dict=True,
 	)
+	# Picker stamps are custom fields; read them only once `bench migrate` has added them.
+	if lists and _has("Pick List", "wt_picked_by") and _has("Pick List", "wt_picked_at"):
+		stamps = {r.name: r for r in frappe.db.sql(
+			"SELECT name, wt_picked_by, wt_picked_at FROM `tabPick List` WHERE name IN %(names)s",
+			{"names": tuple(pl.name for pl in lists)}, as_dict=True)}
+		for pl in lists:
+			st = stamps.get(pl.name)
+			if st:
+				pl.update(wt_picked_by=st.wt_picked_by, wt_picked_at=st.wt_picked_at)
+	return lists
 
 
 def _pick_rows(names):
@@ -447,30 +457,39 @@ def _stock_invoices(rows):
 			by_so_line[r.sales_order_item].add(r.parent)
 	if not by_so_line and not by_row:
 		return {}
-	has_pli = _has("Sales Invoice Item", "pick_list_item")
-	conds = []
-	p = {}
+	# Two fixed queries rather than one built from parts: by Sales Order line (v15 and v16),
+	# and by pick_list_item where Sales Invoice Item has it (v16). A line found by both counts once.
+	found = {}
 	if by_so_line:
-		conds.append("sii.so_detail IN %(so_lines)s")
-		p["so_lines"] = tuple(by_so_line)
-	if has_pli and by_row:
-		conds.append("sii.pick_list_item IN %(pl_rows)s")
-		p["pl_rows"] = tuple(by_row)
-	if not conds:
-		return {}
-	pli_col = "sii.pick_list_item" if has_pli else "NULL"
-	found = frappe.db.sql(
-		f"""
-		SELECT si.name, si.docstatus, si.posting_date, si.posting_time, si.creation, si.owner,
-		       sii.so_detail, {pli_col} AS pick_list_item, sii.stock_qty
-		FROM `tabSales Invoice Item` sii
-		INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
-		WHERE ({' OR '.join(conds)})
-		  AND si.update_stock = 1 AND si.docstatus < 2 AND IFNULL(si.is_return, 0) = 0
-		""",
-		p,
-		as_dict=True,
-	)
+		for r in frappe.db.sql(
+			"""
+			SELECT sii.name AS row_name, si.name, si.docstatus, si.posting_date, si.posting_time, si.creation,
+			       si.owner, sii.so_detail, sii.stock_qty
+			FROM `tabSales Invoice Item` sii
+			INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+			WHERE sii.so_detail IN %(so_lines)s
+			  AND si.update_stock = 1 AND si.docstatus < 2 AND IFNULL(si.is_return, 0) = 0
+			""",
+			{"so_lines": tuple(by_so_line)},
+			as_dict=True,
+		):
+			r["pick_list_item"] = None
+			found[r.row_name] = r
+	if by_row and _has("Sales Invoice Item", "pick_list_item"):
+		for r in frappe.db.sql(
+			"""
+			SELECT sii.name AS row_name, si.name, si.docstatus, si.posting_date, si.posting_time, si.creation,
+			       si.owner, sii.so_detail, sii.pick_list_item, sii.stock_qty
+			FROM `tabSales Invoice Item` sii
+			INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+			WHERE sii.pick_list_item IN %(pl_rows)s
+			  AND si.update_stock = 1 AND si.docstatus < 2 AND IFNULL(si.is_return, 0) = 0
+			""",
+			{"pl_rows": tuple(by_row)},
+			as_dict=True,
+		):
+			found[r.row_name] = r
+	found = list(found.values())
 	out = defaultdict(dict)
 	for r in found:
 		lists = {by_row[r.pick_list_item]} if r.pick_list_item in by_row else by_so_line.get(r.so_detail, set())
