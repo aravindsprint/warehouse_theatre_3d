@@ -7,6 +7,7 @@ Delivery Note, Pick List or Material Request can be shown on the map. Read-only.
 
 import frappe
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import _flt, _require_view_permission
 
 # doctype: (child table, qty field in stock UOM, source warehouse field, target warehouse field)
@@ -103,6 +104,7 @@ def find_warehouse(warehouse: str):
 	_require_view_permission()
 	if not frappe.db.exists("Warehouse", warehouse):
 		frappe.throw(f"Warehouse {warehouse} not found")
+	access.require_floor(warehouse)
 	return resolve_locations([warehouse])[warehouse]
 
 
@@ -142,5 +144,6 @@ def get_item_locations(item_code: str):
 		(item_code,),
 		as_dict=True,
 	)
+	rows = access.keep(rows, access.allowed_warehouses())
 	places = resolve_locations([r.warehouse for r in rows])
 	return [dict(r, **{k: v for k, v in places[r.warehouse].items() if k != "warehouse"}) for r in rows]

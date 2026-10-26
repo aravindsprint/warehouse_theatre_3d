@@ -103,6 +103,15 @@ const ICONS = {
   check: '<path d="m5 12 5 5 9-10"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   map: '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/>',
+  pack: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>',
+  dispatch: '<path d="M2 6h11v10H2z"/><path d="M13 9h4l3 3v4h-7"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/>',
+  print: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
+  batch: '<rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  receive: '<path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M12 8v8m0 0-3-3m3 3 3-3"/>',
+  returns: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  quality: '<path d="M12 3 4 6v6c0 4.5 3.4 8.4 8 9 4.6-.6 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+  pallets: '<path d="M3 17h18M5 17v3M12 17v3M19 17v3"/><rect x="5" y="5" width="14" height="12" rx="1"/><path d="M5 11h14M12 5v12"/>',
+  replenish: '<path d="M4 20h16"/><path d="M6 20V9h5v11M13 20V4h5v16"/><path d="m8 6 2-2 2 2"/>',
 };
 const icon = (name, size) => `<svg viewBox="0 0 24 24" width="${size || 22}" height="${size || 22}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
@@ -114,6 +123,10 @@ const S = reactive({
   flash: null, busy: false, sheet: null, confirm: null, camera: false,
   keyboard: false, notice: '',
 });
+// Modes in their own files (scan/*.js) register here before mount: home tiles, screens,
+// what a scanned document or other code kind opens, and ?query links.
+const EXT = { tiles: [], screens: {}, docActions: {}, kinds: {}, links: {} };
+
 const floorLabel = computed(() => (S.floors.find(f => f.id === S.floor) || {}).name || 'Choose floor');
 
 let flashTimer = null;
@@ -368,8 +381,9 @@ const Done = {   // result card after posting
       <div class="ws-done-ic" :class="result.tone || 'ok'"><Icon name="check" :size="34"/></div>
       <h2>{{result.title}}</h2>
       <p v-for="(l, i) in result.lines" :key="i">{{l}}</p>
+      <button v-if="result.next" class="ws-btn primary" @click="result.next.fn()">{{result.next.label}}</button>
       <a v-if="result.url" class="ws-btn" :href="result.url" target="_blank" rel="noopener">Open in ERPNext ↗</a>
-      <button class="ws-btn primary" @click="again">{{result.again}}</button>
+      <button class="ws-btn" :class="result.next ? '' : 'primary'" @click="again">{{result.again}}</button>
       <button class="ws-btn ghost" @click="home">Home</button>
     </div>`,
 };
@@ -382,16 +396,30 @@ const Home = {
       if (r.kind === 'document') {
         if (r.action === 'pick') { Pick.open(r.name); return; }
         if (r.action === 'putaway') { Putaway.fromDocument(r.doctype, r.name, r.docstatus); return; }
+        if (EXT.docActions[r.action]) { EXT.docActions[r.action](r); return; }
       }
+      if (EXT.kinds[r.kind]) { EXT.kinds[r.kind](r); return; }
       Lookup.show(r);
     };
-    const tiles = [
+    // Tiles in the order work flows through the warehouse, under three headings.
+    const ORDER = { receive: 10, quality: 20, putaway: 30, pick: 50, batch: 60, pack: 70, dispatch: 80, returns: 90,
+      replenish: 110, pallets: 115, count: 120, lookup: 130 };
+    const GROUP = { receive: 'In', quality: 'In', putaway: 'In', pick: 'Out', batch: 'Out', pack: 'Out', dispatch: 'Out',
+      returns: 'In', replenish: 'Stock', pallets: 'Stock', count: 'Stock', lookup: 'Stock' };
+    const all = [
       { id: 'putaway', title: 'Put away', sub: 'Receipts to locations' },
       { id: 'pick', title: 'Pick', sub: 'Walk a Pick List' },
       { id: 'count', title: 'Count', sub: 'Cycle count a location' },
       { id: 'lookup', title: 'Look up', sub: 'What is where' },
-    ];
+    ].concat(EXT.tiles.filter(t => !t.show || t.show()))
+      .sort((a, b) => (a.order || ORDER[a.id] || 999) - (b.order || ORDER[b.id] || 999));
+    const tiles = all;
+    const groups = [['In', 'Inbound'], ['Out', 'Outbound'], ['Stock', 'Stock']]
+      .map(([k, label]) => ({ label, tiles: all.filter(t => (t.group || GROUP[t.id] || 'Stock') === k) }))
+      .filter(g => g.tiles.length);
     function open(id) {
+      const ext = EXT.tiles.find(t => t.id === id);
+      if (ext) { if (ext.needsFloor !== false && !S.floor) { flash('warn', 'Choose a floor first'); return; } ext.open(); return; }
       if (id !== 'lookup' && !S.floor) { flash('warn', 'Choose a floor first'); return; }
       if (id === 'pick') Pick.reset();
       if (id === 'putaway') Putaway.reset();
@@ -399,7 +427,7 @@ const Home = {
       if (id === 'lookup') Lookup.reset();
       go(id);
     }
-    return { S, tiles, open, labels: () => { if (!S.floor) { flash('warn', 'Choose a floor first'); return; } Labels.reset(); go('labels'); } };
+    return { S, tiles, groups, open, labels: () => { if (!S.floor) { flash('warn', 'Choose a floor first'); return; } Labels.reset(); go('labels'); } };
   },
   template: `
     <div>
@@ -407,13 +435,16 @@ const Home = {
       <main class="ws-main">
         <Prompt text="Scan anything" hint="A location label, an item, a Pick List or a receipt. The app opens the right job."/>
         <div v-if="S.floorsLoaded && !S.floors.length" class="ws-note">No floors are set up yet. Map your warehouse in the 3D app first, then print location labels from here.</div>
-        <div class="ws-tiles">
-          <button v-for="t in tiles" :key="t.id" class="ws-tile" :class="'t-'+t.id" @click="open(t.id)">
-            <Icon :name="t.id" :size="28"/>
-            <span class="ws-tile-t">{{t.title}}</span>
-            <span class="ws-tile-s">{{t.sub}}</span>
-          </button>
-        </div>
+        <template v-for="g in groups" :key="g.label">
+          <div v-if="groups.length > 1" class="ws-h">{{g.label}}</div>
+          <div class="ws-tiles">
+            <button v-for="t in g.tiles" :key="t.id" class="ws-tile" :class="'t-'+t.id" @click="open(t.id)">
+              <Icon :name="t.id" :size="28"/>
+              <span class="ws-tile-t">{{t.title}}</span>
+              <span class="ws-tile-s">{{t.sub}}</span>
+            </button>
+          </div>
+        </template>
         <button class="ws-row-btn" @click="labels"><Icon name="labels"/><span><b>Print location labels</b><small>QR labels for every rack shelf and floor area</small></span></button>
         <a class="ws-row-btn" href="/warehouse-theatre-3d"><Icon name="map"/><span><b>Open the 3D view</b><small>The full warehouse map</small></span></a>
         <label class="ws-toggle"><input type="checkbox" v-model="S.sound"/> Beep on scan</label>
@@ -429,8 +460,10 @@ const Lookup = {
   async show(r) {
     if (r.kind === 'document') {
       if (r.action === 'pick') return Pick.open(r.name);
+      if (EXT.docActions[r.action]) return EXT.docActions[r.action](r);
       return Putaway.fromDocument(r.doctype, r.name, r.docstatus);
     }
+    if (EXT.kinds[r.kind]) return EXT.kinds[r.kind](r);
     L.result = r; L.data = null; L.loading = true; go('lookup');
     flash('ok', r.kind === 'item' ? r.item_code : r.path);
     try {
@@ -680,13 +713,17 @@ const Pick = {
       K.pl = await api('scan', 'get_pick_list', { name });
       K.pl.rows.forEach(r => { if (r.picked_qty > 0) K.picks[r.row_name] = { picked_qty: r.picked_qty, warehouse: null, saved: true }; });
       if (!K.pl.can_write) flash('warn', K.pl.docstatus === 0 ? "You can't change this Pick List" : `${name} is already submitted`);
-      else flash('ok', name);
+      else {
+        flash('ok', name);
+        // Take the job: assigns the list to me (ERPNext Assign To) unless someone else has it.
+        api('picking', 'claim', { names: [name] }, true).then(c => { if (c.skipped.length) flash('warn', c.skipped[0].reason); }).catch(() => {});
+      }
     } catch (e) { flash('err', e.message); K.pl = null; }
     finally { K.loading = false; }
   },
   async loadLists() {
     K.loading = true;
-    try { K.lists = (await api('routes', 'get_pick_lists', { group_warehouse: S.floor, days: 30, limit: 50 })).filter(l => l.docstatus === 0); }
+    try { K.lists = (await api('picking', 'get_work_queue', { floor: S.floor })).lists; }
     catch (e) { flash('err', e.message); K.lists = []; }
     finally { K.loading = false; }
   },
@@ -749,11 +786,21 @@ const Pick = {
           return;
         }
         if (r.batch_no && row.batch_no && r.batch_no !== row.batch_no) { flash('err', `Wrong batch: line ${row.idx} needs ${row.batch_no}`); return; }
+        // First expiry, first out: a line with no batch set should take the batch expiring first.
+        const first = !row.batch_no && r.batch_no ? fefoFirst(row, r.batch_no) : null;
+        if (first && !(await confirmSheet('Pick the older batch?', `Batch ${first.batch_no} on this shelf expires ${first.expiry}, before ${r.batch_no}${first.mine ? ' (' + first.mine + ')' : ''}. Pick ${first.batch_no} first.`, 'Pick ' + r.batch_no + ' anyway', true))) return;
         return pickRow(row, r);
       }
       flash('err', 'Scan a location or an item');
     };
 
+    function fefoFirst(row, scanned) {
+      const live = (row.batches || []).filter(b => b.qty > 0);
+      const top = live[0], mine = live.find(b => b.batch_no === scanned);
+      if (!top || !top.expiry || top.batch_no === scanned) return null;
+      if (mine && mine.expiry && mine.expiry <= top.expiry) return null;
+      return { batch_no: top.batch_no, expiry: top.expiry, mine: mine && mine.expiry ? 'expires ' + mine.expiry : '' };
+    }
     function skipStop() { if (stop.value) stop.value.rows.forEach(r => { if (!K.picks[r.row_name]) K.skipped[r.row_name] = true; }); }
     function setOrder(o) { K.order = o; prefs.set('pickOrder', o); }
     async function save(submit) {
@@ -768,7 +815,8 @@ const Pick = {
         const r = await api('scan', 'save_picks', { name: K.pl.name, picks, submit: submit ? 1 : 0 }, true);
         Object.values(K.picks).forEach(p => { p.saved = true; p.warehouse = null; });
         if (submit) {
-          K.result = { title: 'Pick List submitted', lines: [`${r.name}`, short ? `${short} line${short === 1 ? '' : 's'} short` : 'All lines picked'], url: r.url, doc: 'Pick List', again: 'Pick another list', tone: short ? 'warn' : 'ok' };
+          K.result = { title: 'Pick List submitted', lines: [`${r.name}`, short ? `${short} line${short === 1 ? '' : 's'} short` : 'All lines picked'], url: r.url, doc: 'Pick List', again: 'Pick another list', tone: short ? 'warn' : 'ok',
+            next: EXT.afterPick ? EXT.afterPick(r.name) : null };
           feedback('ok');
         } else flash('ok', 'Picks saved');
         cache.clear();
@@ -780,7 +828,15 @@ const Pick = {
       if (K.pl && !K.result) { Pick.reset(); Pick.loadLists(); return; }
       Pick.reset(); go('home');
     }
-    return { S, K, rows, stops, stop, stopIdx, doneCount, pending, isDone, pickRow, skipStop, setOrder, save, back, fmt, daysAgo,
+    async function nextJob() {
+      K.loading = true;
+      try { const r = await api('picking', 'claim_next', { floor: S.floor, count: 1 }, true); if (r.names.length) Pick.open(r.names[0]); else flash('warn', 'No free Pick Lists on this floor'); }
+      catch (e) { flash('err', e.message); }
+      finally { K.loading = false; }
+    }
+    const hasBatch = !!EXT.screens.batch;
+    function batch() { const t = EXT.tiles.find(x => x.id === 'batch'); if (t) t.open(); }
+    return { S, K, rows, stops, stop, stopIdx, doneCount, pending, isDone, pickRow, skipStop, setOrder, save, back, fmt, daysAgo, nextJob, hasBatch, batch,
       open: n => Pick.open(n), again: () => { Pick.reset(); Pick.loadLists(); }, home: () => { Pick.reset(); go('home'); } };
   },
   template: `
@@ -789,13 +845,17 @@ const Pick = {
       <main class="ws-main">
         <Done v-if="K.result" :result="K.result" @again="again" @home="home"/>
         <template v-else-if="!K.pl">
-          <Prompt text="Scan a Pick List" hint="Or choose one of the draft Pick Lists for this floor."/>
+          <Prompt text="Scan a Pick List" hint="Or take the next job. Yours come first, then unassigned ones by delivery date."/>
+          <div class="ws-actions" v-if="K.lists && K.lists.length">
+            <button class="ws-btn primary" :disabled="K.loading" @click="nextJob">Next job</button>
+            <button v-if="hasBatch" class="ws-btn" @click="batch">Batch pick</button>
+          </div>
           <div v-if="K.loading" class="ws-muted">Loading…</div>
-          <button v-for="l in K.lists || []" :key="l.name" class="ws-line btn" @click="open(l.name)">
-            <div><b>{{l.name}}</b><small>{{l.customer || l.purpose}} · {{daysAgo(l.creation) === 0 ? 'today' : daysAgo(l.creation) + ' days ago'}}</small></div>
+          <button v-for="l in K.lists || []" :key="l.name" class="ws-line btn" :class="{taken: l.assigned.length && !l.mine}" @click="open(l.name)">
+            <div><b>{{l.customer || l.name}}</b><small><span v-if="l.mine" class="ws-who">Yours · </span><span v-else-if="l.assigned.length" class="ws-who">{{l.assigned_names.join(', ')}} · </span><span v-if="l.due">due {{l.due}} · </span>{{l.name}} · {{daysAgo(l.creation) === 0 ? 'today' : daysAgo(l.creation) + ' days ago'}}</small></div>
             <div class="ws-num">{{l.floor_rows}} <small>line{{l.floor_rows==1?'':'s'}}</small></div>
           </button>
-          <div v-if="K.lists && !K.lists.length" class="ws-muted">No draft Pick Lists on this floor in the last 30 days.</div>
+          <div v-if="K.lists && !K.lists.length" class="ws-muted">No draft Pick Lists on this floor.</div>
         </template>
         <template v-else>
           <div class="ws-seg" role="group" aria-label="Order">
@@ -813,7 +873,9 @@ const Pick = {
             <Prompt v-if="!K.at" :text="'Scan the location ' + stop.path" hint="Confirms you're at the right shelf." tone="go"/>
             <Prompt v-else :text="'Scan each item'" :hint="K.at.warehouse===stop.warehouse ? 'Or tap a line to enter it without scanning.' : 'Picking from ' + K.at.path + ' instead.'" :tone="K.at.warehouse===stop.warehouse ? 'go' : 'warn'"/>
             <button v-for="r in stop.rows" :key="r.row_name" class="ws-line btn" :class="{done:isDone(r)}" @click="pickRow(r)">
-              <div><b>{{r.item_code}}</b><small>Line {{r.idx}} · {{r.item_name}}<span v-if="r.batch_no"> · batch {{r.batch_no}}</span></small></div>
+              <div><b>{{r.item_code}}</b><small>Line {{r.idx}} · {{r.item_name}}<span v-if="r.batch_no"> · batch {{r.batch_no}}<template v-if="r.batch_expiry"> (exp {{r.batch_expiry}})</template></span></small>
+                <small v-if="r.fefo" class="ws-fefo">Batch {{r.fefo.batch_no}} here expires sooner ({{r.fefo.expiry}})</small>
+                <small v-else-if="!r.batch_no && r.batches && r.batches.length && r.batches[0].expiry" class="ws-fefo ok">Take batch {{r.batches[0].batch_no}} first · exp {{r.batches[0].expiry}}</small></div>
               <div class="ws-num">
                 <template v-if="K.picks[r.row_name]">{{fmt(K.picks[r.row_name].picked_qty)}}<small>/{{fmt(r.qty)}} {{r.uom}}</small></template>
                 <template v-else>{{fmt(r.qty)}} <small>{{r.uom}}</small></template>
@@ -1111,12 +1173,13 @@ const Root = {
       if ([...q.keys()].length) { try { history.replaceState(null, '', location.pathname); } catch (e) {} }
       if (q.get('pick')) Pick.open(q.get('pick'));
       else if (q.get('putaway') && q.get('name')) Putaway.fromDocument(q.get('putaway'), q.get('name'), 1);
+      else if (Object.keys(EXT.links).some(k => q.get(k))) { const k = Object.keys(EXT.links).find(x => q.get(x)); EXT.links[k](q.get(k), q); }
       else if (q.get('count')) { try { const r = await resolve(q.get('count')); if (r.kind === 'location') { go('count'); Count.start(r); } } catch (e) { flash('err', e.message); } }
     }
     onMounted(boot);
     watch(() => S.sound, v => prefs.set('sound', v));
     watch(() => S.floor, v => { if (v) prefs.set('floor', v); });
-    const view = computed(() => ({ home: Home, lookup: Lookup, putaway: Putaway, pick: Pick, count: Count, labels: Labels }[S.screen] || Home));
+    const view = computed(() => ({ home: Home, lookup: Lookup, putaway: Putaway, pick: Pick, count: Count, labels: Labels, ...EXT.screens }[S.screen] || Home));
     return { S, C, view, floorSheet, onScan, pickFloor: () => { floorSheet.value.open = true; } };
   },
   template: `
@@ -1134,6 +1197,20 @@ const Root = {
 
 window.WarehouseScan = {
   mount(el) { const app = createApp(Root); app.mount(el); return app; },
+  /* For mode files in scan/: shared state, server calls, sheets and components. */
+  core: { S, EXT, ICONS, api, flash, feedback, ask, confirmSheet, go, handler, resolve, cache, prefs, fmt, daysAgo, loadScript, QR_URL,
+    components: { TopBar, Prompt, Icon, Done },
+    // Hand stock to putaway: from a receipt, or as items sitting in a warehouse (from_warehouse).
+    putaway: {
+      fromDocument: (doctype, name, docstatus) => Putaway.fromDocument(doctype, name, docstatus),
+      async items(items, label) {
+        if (!S.floor) { flash('warn', 'Choose a floor first'); return; }
+        Putaway.reset(); go('putaway'); P.loading = true;
+        try { if (label) P.source = { doctype: '', name: label, draft: false }; await Putaway.plan(items); }
+        catch (e) { flash('err', e.message); }
+        finally { P.loading = false; }
+      },
+    } },
   _test: { S, P, K, C, L, LB, onScan, cache },
 };
 })();

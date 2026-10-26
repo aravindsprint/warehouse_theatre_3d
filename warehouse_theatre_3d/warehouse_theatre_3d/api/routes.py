@@ -7,6 +7,7 @@ lives; the server only supplies pick rows and saves a new row order on request.
 import frappe
 from frappe.utils import add_days, nowdate
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	_flt,
 	_int,
@@ -19,7 +20,9 @@ MAX_LISTS = 300
 
 
 def _floor_whs(floor):
-	return [b.wh for b in get_floor_bins(floor)]
+	"""Stock locations on a Floor that the user may see."""
+	access.require_floor(floor)
+	return [b.wh for b in access.keep(get_floor_bins(floor), access.allowed_warehouses(), "wh")]
 
 
 @frappe.whitelist()
