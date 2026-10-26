@@ -85,6 +85,22 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.fulfillment import (  # noqa:
 	summarise_hours,
 	team_view,
 )
+from warehouse_theatre_3d.warehouse_theatre_3d.api.packing import (  # noqa: E402
+	carton_code,
+	check_carton,
+	invoice_lines_from_picks,
+	next_carton_no,
+	pack_progress,
+	packed_by_line,
+	parse_carton,
+)
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.replenish import (  # noqa: E402
+	allocate_sources,
+	fefo_advice,
+	fefo_order,
+	refill_needs,
+)
 from warehouse_theatre_3d.warehouse_theatre_3d.api.health import (  # noqa: E402
 	bucket_index,
 	classify_movement,
@@ -446,6 +462,145 @@ class TestFulfillment(unittest.TestCase):
 		self.assertEqual(team["stuck"], ["PL-3"])
 		self.assertEqual(team["pickers"][0]["user"], "picker@x.com")
 		self.assertEqual(team["accuracy"]["percent"], 50)
+
+
+class TestPacking(unittest.TestCase):
+	def test_carton_codes(self):
+		self.assertEqual(carton_code("MAT-DN-2026-00012", 2), "MAT-DN-2026-00012/2")
+		self.assertEqual(parse_carton("MAT-DN-2026-00012/2"), ("MAT-DN-2026-00012", 2))
+		self.assertEqual(parse_carton(" ACC-SINV/2026/0001/10 "), ("ACC-SINV/2026/0001", 10))
+		self.assertIsNone(parse_carton("A3-L1"))
+		self.assertIsNone(parse_carton("DN-1/0"))
+		self.assertIsNone(parse_carton(""))
+
+	def test_cartons_and_progress(self):
+		cartons = [{"no": 1, "lines": [{"line": "a", "qty": 2}]}, {"no": 3, "lines": [{"line": "a", "qty": 1}, {"line": "b", "qty": 4}]}]
+		self.assertEqual(next_carton_no(cartons), 4)
+		self.assertEqual(next_carton_no([]), 1)
+		self.assertEqual(packed_by_line(cartons), {"a": 3, "b": 4})
+		self.assertEqual(pack_progress([{"qty": 3, "packed": 3}, {"qty": 5, "packed": 4}]),
+		                 {"lines": 2, "done": 1, "qty": 8, "packed": 7})
+
+	def test_check_carton(self):
+		rem = {"a": 2, "b": 5}
+		self.assertEqual(check_carton([{"line": "a", "qty": 1}, {"line": "a", "qty": 1}, {"line": "b", "qty": 0}], rem),
+		                 [{"line": "a", "qty": 2}])
+		for bad in ([{"line": "a", "qty": 3}], [{"line": "z", "qty": 1}], [{"line": "b", "qty": 0}], [{"line": "a", "qty": -1}], []):
+			with self.assertRaises(ValueError):
+				check_carton(bad, rem)
+
+	def test_invoice_lines_from_picks(self):
+		so_items = [{"so_detail": "soi-1", "item_code": "X", "conversion_factor": 12, "rate": 100},
+		            {"so_detail": "soi-2", "item_code": "Y", "conversion_factor": 1}]
+		picks = [
+			{"name": "p1", "sales_order_item": "soi-1", "picked_qty": 24, "warehouse": "A1", "batch_no": "B1"},
+			{"name": "p2", "sales_order_item": "soi-1", "picked_qty": 6, "warehouse": "A2"},
+			{"name": "p3", "sales_order_item": "soi-2", "picked_qty": 0, "warehouse": "A3"},
+			{"name": "p4", "sales_order_item": "soi-9", "picked_qty": 5, "warehouse": "A4"},
+		]
+		out = invoice_lines_from_picks(picks, so_items)
+		self.assertEqual([(x["warehouse"], x["qty"], x["stock_qty"]) for x in out], [("A1", 2, 24), ("A2", 0.5, 6)])
+		self.assertEqual((out[0]["batch_no"], out[0]["use_serial_batch_fields"], out[0]["rate"]), ("B1", 1, 100))
+		self.assertNotIn("use_serial_batch_fields", out[1])
+class TestAccess(unittest.TestCase):
+	PERMS = {
+		"Warehouse": [{"doc": "Main - P", "applicable_for": None}, {"doc": "Rack A - P", "applicable_for": None},
+		              {"doc": "Shop - P", "applicable_for": "Sales Invoice"}],
+		"Company": [{"doc": "Pranera", "applicable_for": ""}],
+		"Customer": [{"doc": "C1", "applicable_for": None}],
+	}
+
+	def test_restricted_values(self):
+		self.assertEqual(access.restricted_values(self.PERMS, "Warehouse"), {"Main - P", "Rack A - P"})
+		self.assertEqual(access.restricted_values(self.PERMS, "Company"), {"Pranera"})
+		self.assertIsNone(access.restricted_values(self.PERMS, "Item"))
+		# Only "for Sales Invoice": doesn't limit what the map shows.
+		self.assertIsNone(access.restricted_values({"Warehouse": [{"doc": "X", "applicable_for": "Sales Invoice"}]}, "Warehouse"))
+		self.assertIsNone(access.restricted_values({}, "Warehouse"))
+
+	def test_combine_and_keep(self):
+		company = {"A": "Pranera", "B": "Other", "C": "Pranera"}
+		self.assertEqual(access.combine(["A", "B", "C"], company, {"A", "B"}, None), {"A", "B"})
+		self.assertEqual(access.combine(["A", "B", "C"], company, None, {"Pranera"}), {"A", "C"})
+		self.assertEqual(access.combine(["A", "B", "C"], company, {"A", "B"}, {"Pranera"}), {"A"})
+		rows = [{"warehouse": "A"}, {"warehouse": "B"}]
+		self.assertEqual(access.keep(rows, None), rows)
+		self.assertEqual(access.keep(rows, {"B"}), [{"warehouse": "B"}])
+		self.assertEqual(access.keep([{"wh": "A"}], set(), "wh"), [])
+
+	def test_sql_params(self):
+		self.assertEqual(access.sql_params(None), {"wh_all": 1, "wh_list": ("",)})
+		self.assertEqual(access.sql_params({"B", "A"}), {"wh_all": 0, "wh_list": ("A", "B")})
+		self.assertEqual(access.sql_params(set()), {"wh_all": 0, "wh_list": ("",)})
+
+	def test_allowed_warehouses_with_site(self):
+		import frappe
+		mod = types.ModuleType("frappe.core.doctype.user_permission.user_permission")
+		mod.get_user_permissions = lambda user: self.PERMS
+		saved = {k: getattr(frappe, k, None) for k in ("session", "local")}
+		saved_sql = getattr(frappe.db, "sql", None)
+		sys.modules["frappe.core.doctype.user_permission.user_permission"] = mod
+		try:
+			frappe.session = types.SimpleNamespace(user="picker@x.com")
+			frappe.local = types.SimpleNamespace()
+			frappe.db.sql = lambda q, p=None, as_dict=False: [
+				types.SimpleNamespace(name="Main - P", company="Pranera"),
+				types.SimpleNamespace(name="Rack A - P", company="Other")]
+			self.assertEqual(access.allowed_warehouses(), {"Main - P"})
+			self.assertTrue(access.can_see("Main - P"))
+			self.assertFalse(access.can_see("Rack A - P"))
+			with self.assertRaises(PermissionError):
+				access.require("Rack A - P")
+			frappe.session.user, frappe.local = "Administrator", types.SimpleNamespace()
+			self.assertIsNone(access.allowed_warehouses())
+		finally:
+			for k, v in saved.items():
+				setattr(frappe, k, v)
+			frappe.db.sql = saved_sql
+			sys.modules.pop("frappe.core.doctype.user_permission.user_permission", None)
+
+
+class TestReplenish(unittest.TestCase):
+	FACES = [
+		{"name": "f1", "item_code": "A", "warehouse": "P1", "min_qty": 10, "max_qty": 50},
+		{"name": "f2", "item_code": "B", "warehouse": "P2", "min_qty": 5, "max_qty": 20},
+		{"name": "f3", "item_code": "C", "warehouse": "P3", "min_qty": 5, "max_qty": 20},
+	]
+
+	def test_refill_needs(self):
+		on_hand = {("A", "P1"): 12, ("B", "P2"): 4, ("C", "P3"): 30}
+		pending = {("A", "P1"): 15}
+		out = refill_needs(self.FACES, on_hand, pending)
+		self.assertEqual([r["name"] for r in out], ["f1", "f2"])     # C is above its level
+		a = out[0]
+		self.assertTrue(a["urgent"])                                  # picks need 15, shelf has 12
+		self.assertEqual((a["available"], a["need"]), (-3, 53))       # back up to 50 after the picks
+		self.assertEqual((out[1]["need"], out[1]["urgent"]), (16, False))
+		self.assertEqual(refill_needs(self.FACES, {("A", "P1"): 11, ("B", "P2"): 6, ("C", "P3"): 6}, {}), [])
+
+	def test_allocate_sources(self):
+		src = [
+			{"warehouse": "R-other-floor", "qty": 100, "floor": "F2", "expiry": "2026-11-01"},
+			{"warehouse": "R-late", "qty": 10, "floor": "F1", "expiry": "2027-05-01"},
+			{"warehouse": "R-early", "qty": 10, "floor": "F1", "expiry": "2026-12-01"},
+			{"warehouse": "R-none", "qty": 40, "floor": "F1", "expiry": None},
+		]
+		picks, short = allocate_sources(25, src, floor="F1")
+		self.assertEqual([(p["warehouse"], p["qty"]) for p in picks], [("R-early", 10), ("R-late", 10), ("R-none", 5)])
+		self.assertEqual(short, 0)
+		picks, short = allocate_sources(200, src, floor="F1")
+		self.assertEqual((len(picks), short), (4, 40))
+		self.assertEqual(allocate_sources(5, [], "F1"), ([], 5))
+
+	def test_fefo(self):
+		batches = [{"batch_no": "B2", "qty": 5, "expiry": "2027-01-01"}, {"batch_no": "B1", "qty": 5, "expiry": "2026-11-15"},
+		           {"batch_no": "B0", "qty": 0, "expiry": "2026-10-01"}, {"batch_no": "BX", "qty": 9, "expiry": None}]
+		self.assertEqual([b["batch_no"] for b in fefo_order(batches)], ["B1", "B2", "BX"])
+		self.assertIsNone(fefo_advice("B1", batches))
+		self.assertEqual(fefo_advice("B2", batches), {"batch_no": "B1", "expiry": "2026-11-15", "scanned_expiry": "2027-01-01"})
+		self.assertEqual(fefo_advice("BX", batches)["batch_no"], "B1")
+		self.assertIsNone(fefo_advice("B2", [{"batch_no": "BX", "qty": 1, "expiry": None}, {"batch_no": "B2", "qty": 1, "expiry": "2027-01-01"}]))
+		self.assertIsNone(fefo_advice("B9", []))
 
 
 if __name__ == "__main__":

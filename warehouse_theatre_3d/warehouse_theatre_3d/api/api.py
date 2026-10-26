@@ -1,6 +1,8 @@
 import frappe
 import json
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access
+
 # Roles allowed to VIEW the app (read-only access)
 VIEW_ROLES = {"System Manager", "Stock Manager", "Stock User"}
 # Roles allowed to EDIT (floor plan, configure slot, UOM capacity)
@@ -40,7 +42,9 @@ def _int(v):
 @frappe.whitelist(allow_guest=False)
 def get_companies():
 	_require_view_permission()
-	return frappe.db.get_all('Company', fields=['name', 'abbr'], order_by='name asc')
+	rows = frappe.db.get_all('Company', fields=['name', 'abbr'], order_by='name asc')
+	cos = access.allowed_companies()
+	return rows if cos is None else [r for r in rows if r.name in cos]
 
 
 @frappe.whitelist(allow_guest=False)
@@ -81,7 +85,11 @@ def get_warehouse_groups(company=None):
 		params,
 		as_dict=True,
 	)
-	return sorted(floors + standalone, key=lambda g: ((g.parent_name or ''), (g.name or '')))
+	nav = access.navigable()
+	groups = floors + standalone
+	if nav is not None:
+		groups = [g for g in groups if g.id in nav]
+	return sorted(groups, key=lambda g: ((g.parent_name or ''), (g.name or '')))
 
 
 WT_TYPES = ('Building', 'Floor', 'Slot', 'Bin', 'Zone')
@@ -97,11 +105,14 @@ def get_slots(group_warehouse):
 	warehouse) is its own floor holding just that Zone.
 	"""
 	_require_view_permission()
+	access.require_floor(group_warehouse)
+	nav, allowed = access.navigable(), access.allowed_warehouses()
 	slots = [] if _is_zone(group_warehouse) else _slot_rows(group_warehouse)
+	slots = access.keep(slots, nav, 'wh')
 	for sl in slots:
 		sl['kind'] = 'rack'
-		sl['levels'] = _get_levels(sl['wh'])
-	zones = _zone_rows(group_warehouse)
+		sl['levels'] = access.keep(_get_levels(sl['wh']), allowed, 'wh')
+	zones = access.keep(_zone_rows(group_warehouse), allowed, 'wh')
 	for z in zones:
 		z['levels'] = [{
 			'wh': z['wh'], 'label': ZONE_LEVEL_LABEL,
@@ -114,7 +125,9 @@ def get_slots(group_warehouse):
 def get_all_slots(group_warehouse):
 	"""All Slots and Zones on a Floor, for the floor plan editor."""
 	_require_view_permission()
-	return sorted(_slot_rows(group_warehouse) + _zone_rows(group_warehouse),
+	access.require_floor(group_warehouse)
+	return sorted(access.keep(_slot_rows(group_warehouse), access.navigable(), 'wh')
+		+ access.keep(_zone_rows(group_warehouse), access.allowed_warehouses(), 'wh'),
 		key=lambda r: (r['row'], r['col'], r['label'] or ''))
 
 
@@ -229,6 +242,7 @@ def _get_items(level_wh):
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def save_slot_position(warehouse, row, col, row_gap=0, span=None):
 	_require_edit_permission()
+	access.require(warehouse)
 	values = {
 		'wt_row':     _int(row),
 		'wt_col':     _int(col),
@@ -251,6 +265,7 @@ def get_floor_layout(group_warehouse):
 	since aisle cells have no underlying Slot warehouse to store that state on.
 	"""
 	_require_view_permission()
+	access.require_floor(group_warehouse)
 	raw = frappe.db.get_value('Warehouse', group_warehouse, 'wt_floor_layout')
 	if not raw:
 		return {}
@@ -264,6 +279,7 @@ def get_floor_layout(group_warehouse):
 def save_floor_layout(group_warehouse, layout):
 	"""Persist the Floor Plan editor grid as JSON on the Floor warehouse."""
 	_require_edit_permission()
+	access.require_floor(group_warehouse)
 	if not isinstance(layout, str):
 		layout = json.dumps(layout)
 	frappe.db.set_value('Warehouse', group_warehouse, 'wt_floor_layout', layout)
@@ -273,6 +289,7 @@ def save_floor_layout(group_warehouse, layout):
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def save_stack_config(slot_warehouse, levels):
 	_require_edit_permission()
+	access.require(slot_warehouse)
 	if isinstance(levels, str):
 		levels = json.loads(levels)
 
@@ -305,6 +322,7 @@ def save_stack_config(slot_warehouse, levels):
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def save_uom_capacity(warehouse, uom, capacity):
 	_require_edit_permission()
+	access.require(warehouse)
 	# Check if row already exists
 	existing = frappe.db.get_value(
 		'Warehouse UOM Capacity',
@@ -336,7 +354,8 @@ def get_summary():
 		FROM `tabWarehouse` w
 		LEFT JOIN `tabBin` b ON b.warehouse = w.name
 		WHERE w.wt_warehouse_type IN ('Bin', 'Zone') AND w.disabled = 0
-	""", as_dict=True)
+		  AND (%(wh_all)s = 1 OR w.name IN %(wh_list)s)
+	""", access.wh_filter(), as_dict=True)
 	return data[0] if data else {}
 
 
@@ -355,6 +374,7 @@ def get_user_access():
 		"can_view": bool(user_roles & VIEW_ROLES),
 		"can_edit": bool(user_roles & EDIT_ROLES),
 		"setup_complete": bool(frappe.db.exists("Warehouse", {"wt_warehouse_type": ["is", "set"]})),
+		"access": access.describe(),
 	}
 
 
@@ -385,19 +405,19 @@ def get_parent_warehouse_options(wt_warehouse_type, company=None):
 		filters = {'wt_warehouse_type': parent_role, 'disabled': 0}
 		if company:
 			filters['company'] = company
-		return frappe.get_all(
+		return access.keep(frappe.get_all(
 			'Warehouse', filters=filters,
 			fields=['name', 'warehouse_name'], order_by='warehouse_name asc'
-		)
+		), access.navigable(), 'name')
 
 	if wt_warehouse_type == 'Building':
 		filters = {'is_group': 1, 'parent_warehouse': ['in', ['', None]]}
 		if company:
 			filters['company'] = company
-		return frappe.get_all(
+		return access.keep(frappe.get_all(
 			'Warehouse', filters=filters,
 			fields=['name', 'warehouse_name'], order_by='warehouse_name asc'
-		)
+		), access.navigable(), 'name')
 
 	return []
 
@@ -409,19 +429,20 @@ def get_warehouse_manage_list(company=None):
 	filters = {}
 	if company:
 		filters['company'] = company
-	return frappe.get_all(
+	return access.keep(frappe.get_all(
 		'Warehouse',
 		filters=filters,
 		fields=['name', 'warehouse_name', 'wt_warehouse_type', 'parent_warehouse',
 				'is_group', 'disabled', 'company'],
 		order_by='disabled asc, wt_warehouse_type asc, warehouse_name asc',
-	)
+	), access.navigable(), 'name')
 
 
 @frappe.whitelist(allow_guest=False)
 def get_warehouse_detail(warehouse):
 	"""Full field set for the edit form, incl. the WT UOM Capacities child table."""
 	_require_edit_permission()
+	access.require(warehouse)
 	doc = frappe.get_doc('Warehouse', warehouse)
 	return {
 		'name': doc.name,
@@ -486,6 +507,7 @@ def create_warehouse(data):
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def update_warehouse(warehouse, data):
 	_require_edit_permission()
+	access.require(warehouse)
 	if isinstance(data, str):
 		data = json.loads(data)
 
@@ -526,6 +548,7 @@ def delete_warehouse(warehouse):
 	"""Hard-delete when safe; falls back to disabling when the warehouse has
 	stock/transaction history (Frappe would raise LinkExistsError on delete)."""
 	_require_edit_permission()
+	access.require(warehouse)
 
 	if frappe.db.exists('Warehouse', {'parent_warehouse': warehouse}):
 		frappe.throw('This warehouse has child warehouses. Delete or reassign them first.')

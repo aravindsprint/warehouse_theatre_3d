@@ -103,6 +103,10 @@ const ICONS = {
   check: '<path d="m5 12 5 5 9-10"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   map: '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/>',
+  pack: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>',
+  dispatch: '<path d="M2 6h11v10H2z"/><path d="M13 9h4l3 3v4h-7"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/>',
+  print: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
+  replenish: '<path d="M4 20h16"/><path d="M6 20V9h5v11M13 20V4h5v16"/><path d="m8 6 2-2 2 2"/>',
 };
 const icon = (name, size) => `<svg viewBox="0 0 24 24" width="${size || 22}" height="${size || 22}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
@@ -114,6 +118,10 @@ const S = reactive({
   flash: null, busy: false, sheet: null, confirm: null, camera: false,
   keyboard: false, notice: '',
 });
+// Modes in their own files (scan/*.js) register here before mount: home tiles, screens,
+// what a scanned document or other code kind opens, and ?query links.
+const EXT = { tiles: [], screens: {}, docActions: {}, kinds: {}, links: {} };
+
 const floorLabel = computed(() => (S.floors.find(f => f.id === S.floor) || {}).name || 'Choose floor');
 
 let flashTimer = null;
@@ -368,8 +376,9 @@ const Done = {   // result card after posting
       <div class="ws-done-ic" :class="result.tone || 'ok'"><Icon name="check" :size="34"/></div>
       <h2>{{result.title}}</h2>
       <p v-for="(l, i) in result.lines" :key="i">{{l}}</p>
+      <button v-if="result.next" class="ws-btn primary" @click="result.next.fn()">{{result.next.label}}</button>
       <a v-if="result.url" class="ws-btn" :href="result.url" target="_blank" rel="noopener">Open in ERPNext ↗</a>
-      <button class="ws-btn primary" @click="again">{{result.again}}</button>
+      <button class="ws-btn" :class="result.next ? '' : 'primary'" @click="again">{{result.again}}</button>
       <button class="ws-btn ghost" @click="home">Home</button>
     </div>`,
 };
@@ -382,7 +391,9 @@ const Home = {
       if (r.kind === 'document') {
         if (r.action === 'pick') { Pick.open(r.name); return; }
         if (r.action === 'putaway') { Putaway.fromDocument(r.doctype, r.name, r.docstatus); return; }
+        if (EXT.docActions[r.action]) { EXT.docActions[r.action](r); return; }
       }
+      if (EXT.kinds[r.kind]) { EXT.kinds[r.kind](r); return; }
       Lookup.show(r);
     };
     const tiles = [
@@ -390,8 +401,10 @@ const Home = {
       { id: 'pick', title: 'Pick', sub: 'Walk a Pick List' },
       { id: 'count', title: 'Count', sub: 'Cycle count a location' },
       { id: 'lookup', title: 'Look up', sub: 'What is where' },
-    ];
+    ].concat(EXT.tiles.filter(t => !t.show || t.show()));
     function open(id) {
+      const ext = EXT.tiles.find(t => t.id === id);
+      if (ext) { if (ext.needsFloor !== false && !S.floor) { flash('warn', 'Choose a floor first'); return; } ext.open(); return; }
       if (id !== 'lookup' && !S.floor) { flash('warn', 'Choose a floor first'); return; }
       if (id === 'pick') Pick.reset();
       if (id === 'putaway') Putaway.reset();
@@ -429,8 +442,10 @@ const Lookup = {
   async show(r) {
     if (r.kind === 'document') {
       if (r.action === 'pick') return Pick.open(r.name);
+      if (EXT.docActions[r.action]) return EXT.docActions[r.action](r);
       return Putaway.fromDocument(r.doctype, r.name, r.docstatus);
     }
+    if (EXT.kinds[r.kind]) return EXT.kinds[r.kind](r);
     L.result = r; L.data = null; L.loading = true; go('lookup');
     flash('ok', r.kind === 'item' ? r.item_code : r.path);
     try {
@@ -749,11 +764,21 @@ const Pick = {
           return;
         }
         if (r.batch_no && row.batch_no && r.batch_no !== row.batch_no) { flash('err', `Wrong batch: line ${row.idx} needs ${row.batch_no}`); return; }
+        // First expiry, first out: a line with no batch set should take the batch expiring first.
+        const first = !row.batch_no && r.batch_no ? fefoFirst(row, r.batch_no) : null;
+        if (first && !(await confirmSheet('Pick the older batch?', `Batch ${first.batch_no} on this shelf expires ${first.expiry}, before ${r.batch_no}${first.mine ? ' (' + first.mine + ')' : ''}. Pick ${first.batch_no} first.`, 'Pick ' + r.batch_no + ' anyway', true))) return;
         return pickRow(row, r);
       }
       flash('err', 'Scan a location or an item');
     };
 
+    function fefoFirst(row, scanned) {
+      const live = (row.batches || []).filter(b => b.qty > 0);
+      const top = live[0], mine = live.find(b => b.batch_no === scanned);
+      if (!top || !top.expiry || top.batch_no === scanned) return null;
+      if (mine && mine.expiry && mine.expiry <= top.expiry) return null;
+      return { batch_no: top.batch_no, expiry: top.expiry, mine: mine && mine.expiry ? 'expires ' + mine.expiry : '' };
+    }
     function skipStop() { if (stop.value) stop.value.rows.forEach(r => { if (!K.picks[r.row_name]) K.skipped[r.row_name] = true; }); }
     function setOrder(o) { K.order = o; prefs.set('pickOrder', o); }
     async function save(submit) {
@@ -768,7 +793,8 @@ const Pick = {
         const r = await api('scan', 'save_picks', { name: K.pl.name, picks, submit: submit ? 1 : 0 }, true);
         Object.values(K.picks).forEach(p => { p.saved = true; p.warehouse = null; });
         if (submit) {
-          K.result = { title: 'Pick List submitted', lines: [`${r.name}`, short ? `${short} line${short === 1 ? '' : 's'} short` : 'All lines picked'], url: r.url, doc: 'Pick List', again: 'Pick another list', tone: short ? 'warn' : 'ok' };
+          K.result = { title: 'Pick List submitted', lines: [`${r.name}`, short ? `${short} line${short === 1 ? '' : 's'} short` : 'All lines picked'], url: r.url, doc: 'Pick List', again: 'Pick another list', tone: short ? 'warn' : 'ok',
+            next: EXT.afterPick ? EXT.afterPick(r.name) : null };
           feedback('ok');
         } else flash('ok', 'Picks saved');
         cache.clear();
@@ -813,7 +839,9 @@ const Pick = {
             <Prompt v-if="!K.at" :text="'Scan the location ' + stop.path" hint="Confirms you're at the right shelf." tone="go"/>
             <Prompt v-else :text="'Scan each item'" :hint="K.at.warehouse===stop.warehouse ? 'Or tap a line to enter it without scanning.' : 'Picking from ' + K.at.path + ' instead.'" :tone="K.at.warehouse===stop.warehouse ? 'go' : 'warn'"/>
             <button v-for="r in stop.rows" :key="r.row_name" class="ws-line btn" :class="{done:isDone(r)}" @click="pickRow(r)">
-              <div><b>{{r.item_code}}</b><small>Line {{r.idx}} · {{r.item_name}}<span v-if="r.batch_no"> · batch {{r.batch_no}}</span></small></div>
+              <div><b>{{r.item_code}}</b><small>Line {{r.idx}} · {{r.item_name}}<span v-if="r.batch_no"> · batch {{r.batch_no}}<template v-if="r.batch_expiry"> (exp {{r.batch_expiry}})</template></span></small>
+                <small v-if="r.fefo" class="ws-fefo">Batch {{r.fefo.batch_no}} here expires sooner ({{r.fefo.expiry}})</small>
+                <small v-else-if="!r.batch_no && r.batches && r.batches.length && r.batches[0].expiry" class="ws-fefo ok">Take batch {{r.batches[0].batch_no}} first · exp {{r.batches[0].expiry}}</small></div>
               <div class="ws-num">
                 <template v-if="K.picks[r.row_name]">{{fmt(K.picks[r.row_name].picked_qty)}}<small>/{{fmt(r.qty)}} {{r.uom}}</small></template>
                 <template v-else>{{fmt(r.qty)}} <small>{{r.uom}}</small></template>
@@ -1111,12 +1139,13 @@ const Root = {
       if ([...q.keys()].length) { try { history.replaceState(null, '', location.pathname); } catch (e) {} }
       if (q.get('pick')) Pick.open(q.get('pick'));
       else if (q.get('putaway') && q.get('name')) Putaway.fromDocument(q.get('putaway'), q.get('name'), 1);
+      else if (Object.keys(EXT.links).some(k => q.get(k))) { const k = Object.keys(EXT.links).find(x => q.get(x)); EXT.links[k](q.get(k), q); }
       else if (q.get('count')) { try { const r = await resolve(q.get('count')); if (r.kind === 'location') { go('count'); Count.start(r); } } catch (e) { flash('err', e.message); } }
     }
     onMounted(boot);
     watch(() => S.sound, v => prefs.set('sound', v));
     watch(() => S.floor, v => { if (v) prefs.set('floor', v); });
-    const view = computed(() => ({ home: Home, lookup: Lookup, putaway: Putaway, pick: Pick, count: Count, labels: Labels }[S.screen] || Home));
+    const view = computed(() => ({ home: Home, lookup: Lookup, putaway: Putaway, pick: Pick, count: Count, labels: Labels, ...EXT.screens }[S.screen] || Home));
     return { S, C, view, floorSheet, onScan, pickFloor: () => { floorSheet.value.open = true; } };
   },
   template: `
@@ -1134,6 +1163,9 @@ const Root = {
 
 window.WarehouseScan = {
   mount(el) { const app = createApp(Root); app.mount(el); return app; },
+  /* For mode files in scan/: shared state, server calls, sheets and components. */
+  core: { S, EXT, ICONS, api, flash, feedback, ask, confirmSheet, go, handler, resolve, cache, prefs, fmt, daysAgo, loadScript, QR_URL,
+    components: { TopBar, Prompt, Icon, Done } },
   _test: { S, P, K, C, L, LB, onScan, cache },
 };
 })();
