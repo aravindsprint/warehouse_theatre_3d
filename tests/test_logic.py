@@ -8,7 +8,7 @@ when Frappe isn't installed a minimal stub is used so they run anywhere.
 import sys
 import types
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 
 def _install_frappe_stub():
@@ -72,6 +72,18 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.scan import (  # noqa: E402
 	count_queue,
 	place_path,
 	walk_order,
+)
+from warehouse_theatre_3d.warehouse_theatre_3d.api.fulfillment import (  # noqa: E402
+	billing_percent,
+	build_order,
+	daily_counts,
+	line_stats,
+	my_work,
+	order_flow,
+	order_stage,
+	posting_datetime,
+	summarise_hours,
+	team_view,
 )
 from warehouse_theatre_3d.warehouse_theatre_3d.api.health import (  # noqa: E402
 	bucket_index,
@@ -331,6 +343,109 @@ class TestUpdatesSignup(unittest.TestCase):
 		d = json.loads(p["data"])
 		self.assertEqual(d, {"doctype": "Lead", "web_form_name": "wf", "first_name": "Ravi", "email_id": "ravi@example.com",
 		                     "company_name": "", "mobile_no": "", "website": "https://erp.client.in"})
+
+
+class TestFulfillment(unittest.TestCase):
+	NOW = datetime(2026, 10, 26, 18, 0)
+
+	def pl(self, name="PL-1", docstatus=1, **kw):
+		d = {"name": name, "docstatus": docstatus, "customer": "C1", "company": "Co",
+		     "creation": datetime(2026, 10, 26, 9, 0), "modified": datetime(2026, 10, 26, 11, 0),
+		     "wt_picked_by": "picker@x.com" if docstatus == 1 else None,
+		     "wt_picked_at": datetime(2026, 10, 26, 10, 0) if docstatus == 1 else None,
+		     "_assign": None, "scan_mode": 1}
+		d.update(kw)
+		return d
+
+	ROWS = [{"stock_qty": 5, "picked_qty": 5}, {"stock_qty": 3, "picked_qty": 2}]
+
+	def test_stage_delivery_note_flow(self):
+		self.assertEqual(order_stage(0, []), "pending")
+		self.assertEqual(order_stage(1, []), "picked")
+		self.assertEqual(order_stage(1, [{"kind": "dn", "docstatus": 0, "packed": False}]), "picked")
+		self.assertEqual(order_stage(1, [{"kind": "dn", "docstatus": 0, "packed": True}]), "packed")
+		self.assertEqual(order_stage(1, [{"kind": "dn", "docstatus": 1, "packed": False}]), "dispatched")
+
+	def test_stage_sales_invoice_flow(self):
+		self.assertEqual(order_stage(1, [{"kind": "si", "docstatus": 0}]), "packed")
+		self.assertEqual(order_stage(1, [{"kind": "si", "docstatus": 1}]), "dispatched")
+		# A draft Pick List is pending whatever else exists.
+		self.assertEqual(order_stage(0, [{"kind": "si", "docstatus": 1}]), "pending")
+
+	def test_flow_and_billing(self):
+		dn = [{"kind": "dn", "docstatus": 1, "per_billed": 40}]
+		si = [{"kind": "si", "docstatus": 1}]
+		self.assertEqual(order_flow([]), None)
+		self.assertEqual(order_flow(dn), "Delivery Note")
+		self.assertEqual(order_flow(si), "Sales Invoice")
+		self.assertEqual(billing_percent("Delivery Note", dn), 40)
+		self.assertEqual(billing_percent("Sales Invoice", si), 100)
+		self.assertIsNone(billing_percent("Delivery Note", [{"kind": "dn", "docstatus": 0}]))
+
+	def test_line_stats(self):
+		self.assertEqual(line_stats(self.ROWS + [{"stock_qty": 1, "picked_qty": 0}]),
+		                 {"lines": 3, "short": 2, "untouched": 1})
+
+	def test_posting_datetime(self):
+		self.assertEqual(posting_datetime(date(2026, 10, 26), timedelta(hours=14, minutes=5)), datetime(2026, 10, 26, 14, 5))
+		self.assertEqual(posting_datetime("2026-10-26", "09:30:15.123"), datetime(2026, 10, 26, 9, 30, 15))
+		self.assertIsNone(posting_datetime(None, None))
+
+	def test_build_order_delivery_note_packed_then_dispatched(self):
+		dn = {"name": "DN-1", "docstatus": 0, "per_billed": 0, "qty": 7, "creation": datetime(2026, 10, 26, 12, 0),
+		      "owner": "clerk@x.com", "posting_date": date(2026, 10, 26), "posting_time": timedelta(hours=12)}
+		slips = {"DN-1": [{"name": "PS-1", "creation": datetime(2026, 10, 26, 13, 0), "owner": "packer@x.com"}]}
+		o = build_order(self.pl(), self.ROWS, [dn], slips, [], self.NOW)
+		self.assertEqual((o["stage"], o["flow"], o["packed_by"]), ("packed", "Delivery Note", "packer@x.com"))
+		self.assertEqual(o["short"], 1)
+		self.assertEqual(o["hours_in_stage"], 5.0)
+		self.assertEqual(o["times"]["wait"], 1.0)
+		self.assertEqual(o["times"]["pack"], 3.0)
+		dn.update(docstatus=1, posting_time=timedelta(hours=15))
+		o = build_order(self.pl(), self.ROWS, [dn], slips, [], self.NOW)
+		self.assertEqual(o["stage"], "dispatched")
+		self.assertEqual(o["times"]["ship"], 2.0)
+		self.assertEqual(o["times"]["total"], 6.0)
+		self.assertFalse(o["partial"])
+		self.assertEqual(o["billed"], 0)
+
+	def test_build_order_sales_invoice_and_partial(self):
+		si = {"name": "SI-1", "docstatus": 1, "qty": 4, "creation": datetime(2026, 10, 26, 14, 0), "owner": "acc@x.com",
+		      "posting_date": date(2026, 10, 26), "posting_time": timedelta(hours=14, minutes=30)}
+		o = build_order(self.pl(), self.ROWS, [], {}, [si], self.NOW)
+		self.assertEqual((o["stage"], o["flow"], o["billed"]), ("dispatched", "Sales Invoice", 100))
+		self.assertTrue(o["partial"])  # 4 of 7 picked units went out
+		self.assertEqual(o["packed_by"], "acc@x.com")
+
+	def test_build_order_pending_and_unstamped(self):
+		o = build_order(self.pl(docstatus=0, _assign='["picker@x.com"]'), [{"stock_qty": 2, "picked_qty": 1}, {"stock_qty": 1, "picked_qty": 0}],
+		                [], {}, [], self.NOW)
+		self.assertEqual((o["stage"], o["progress"], o["short"], o["assigned"]), ("pending", 1, 0, ["picker@x.com"]))
+		o = build_order(self.pl(wt_picked_by=None, wt_picked_at=None), self.ROWS, [], {}, [], self.NOW)
+		self.assertFalse(o["picked_by_known"])
+		self.assertEqual(o["picked_at"], datetime(2026, 10, 26, 11, 0))  # falls back to modified
+
+	def test_summaries(self):
+		self.assertEqual(summarise_hours([None, 4, 1, 3]), {"n": 3, "median": 3, "avg": 2.7})
+		self.assertEqual(summarise_hours([1, 2, 3, 4])["median"], 2.5)
+		s = daily_counts([datetime(2026, 10, 26, 9), "2026-10-25", None, "2026-09-01"], date(2026, 10, 26), days=3)
+		self.assertEqual([x["n"] for x in s], [0, 1, 1])
+		self.assertEqual(s[-1]["date"], "2026-10-26")
+
+	def test_my_work_and_team(self):
+		today = date(2026, 10, 26)
+		picked = build_order(self.pl("PL-1"), self.ROWS, [], {}, [], self.NOW)
+		pending = build_order(self.pl("PL-2", docstatus=0, _assign='["picker@x.com"]'), self.ROWS, [], {}, [], self.NOW)
+		old = build_order(self.pl("PL-3", docstatus=0, creation=datetime(2026, 10, 24, 9)), self.ROWS, [], {}, [], self.NOW)
+		orders = [picked, pending, old]
+		me = my_work(orders, "picker@x.com", today)
+		self.assertEqual((me["waiting"], me["assigned"]), (2, ["PL-2"]))
+		self.assertEqual(me["picked_today"], {"orders": 1, "lines": 2, "short": 1, "accuracy": 50})
+		team = team_view(orders, today, 30)
+		self.assertEqual(team["funnel"], {"pending": 2, "picked": 1, "packed": 0, "dispatched": 0})
+		self.assertEqual(team["stuck"], ["PL-3"])
+		self.assertEqual(team["pickers"][0]["user"], "picker@x.com")
+		self.assertEqual(team["accuracy"]["percent"], 50)
 
 
 if __name__ == "__main__":
