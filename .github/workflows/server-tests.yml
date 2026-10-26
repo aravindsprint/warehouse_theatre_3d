@@ -1,0 +1,87 @@
+name: Server tests
+
+# Builds a bench with ERPNext v15, installs the app and runs its integration tests
+# (warehouse_theatre_3d/tests/test_live_flows.py) plus the pure unit tests. The result
+# is posted as a comment on the pull request.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: server-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Unit tests (no site)
+        run: |
+          python -m unittest discover -s tests 2>&1 | tee ~/unit.log
+          node --test tests/*.test.js 2>&1 | tee -a ~/unit.log
+
+      - name: System packages and MariaDB
+        run: |
+          sudo systemctl stop mysql || true
+          sudo apt-get remove -y --purge mysql-server mysql-client mysql-common || true
+          sudo apt-get update
+          sudo apt-get install -y mariadb-server mariadb-client libmariadb-dev pkg-config libcups2-dev
+          sudo systemctl start mariadb
+          sudo mariadb -e "ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('root'); FLUSH PRIVILEGES;"
+          sudo mariadb -uroot -proot -e "SET GLOBAL character_set_server = 'utf8mb4'; SET GLOBAL collation_server = 'utf8mb4_unicode_ci';"
+          npm install -g yarn
+          pip install frappe-bench
+
+      - name: Bench with ERPNext
+        run: bash .github/helper/ci-install.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Integration tests
+        id: tests
+        run: |
+          cd ~/frappe-bench
+          set -o pipefail
+          bench --site test_site run-tests --app warehouse_theatre_3d 2>&1 | tee ~/test.log
+
+      - name: Report on the pull request
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const read = f => { try { return fs.readFileSync(process.env.HOME + '/' + f, 'utf8'); } catch (e) { return ''; } };
+            const tests = read('test.log'), install = read('install.log'), unit = read('unit.log');
+            const outcome = '${{ steps.tests.outcome }}';
+            const log = tests || install;
+            const tail = log.split('\n').slice(-220).join('\n').slice(-55000);
+            const unitTail = unit.split('\n').filter(l => /^(Ran|OK|FAILED|# (pass|fail))/.test(l)).join('\n');
+            const icon = outcome === 'success' ? '✅' : outcome === 'failure' ? '❌' : '⚠️';
+            const body = [
+              `### ${icon} Server tests: ${outcome || 'not run'}`,
+              `Commit ${context.sha.slice(0, 7)} · ERPNext version-15 · run ${context.runId}`,
+              '', '**Unit tests**', '```', unitTail || '(none)', '```',
+              '', `<details><summary>${tests ? 'Integration test log' : 'Install log'} (last lines)</summary>`, '', '```', tail, '```', '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
