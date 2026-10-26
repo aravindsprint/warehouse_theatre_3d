@@ -106,6 +106,7 @@ const ICONS = {
   pack: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>',
   dispatch: '<path d="M2 6h11v10H2z"/><path d="M13 9h4l3 3v4h-7"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/>',
   print: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
+  batch: '<rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   replenish: '<path d="M4 20h16"/><path d="M6 20V9h5v11M13 20V4h5v16"/><path d="m8 6 2-2 2 2"/>',
 };
 const icon = (name, size) => `<svg viewBox="0 0 24 24" width="${size || 22}" height="${size || 22}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -695,13 +696,17 @@ const Pick = {
       K.pl = await api('scan', 'get_pick_list', { name });
       K.pl.rows.forEach(r => { if (r.picked_qty > 0) K.picks[r.row_name] = { picked_qty: r.picked_qty, warehouse: null, saved: true }; });
       if (!K.pl.can_write) flash('warn', K.pl.docstatus === 0 ? "You can't change this Pick List" : `${name} is already submitted`);
-      else flash('ok', name);
+      else {
+        flash('ok', name);
+        // Take the job: assigns the list to me (ERPNext Assign To) unless someone else has it.
+        api('picking', 'claim', { names: [name] }, true).then(c => { if (c.skipped.length) flash('warn', c.skipped[0].reason); }).catch(() => {});
+      }
     } catch (e) { flash('err', e.message); K.pl = null; }
     finally { K.loading = false; }
   },
   async loadLists() {
     K.loading = true;
-    try { K.lists = (await api('routes', 'get_pick_lists', { group_warehouse: S.floor, days: 30, limit: 50 })).filter(l => l.docstatus === 0); }
+    try { K.lists = (await api('picking', 'get_work_queue', { floor: S.floor })).lists; }
     catch (e) { flash('err', e.message); K.lists = []; }
     finally { K.loading = false; }
   },
@@ -806,7 +811,15 @@ const Pick = {
       if (K.pl && !K.result) { Pick.reset(); Pick.loadLists(); return; }
       Pick.reset(); go('home');
     }
-    return { S, K, rows, stops, stop, stopIdx, doneCount, pending, isDone, pickRow, skipStop, setOrder, save, back, fmt, daysAgo,
+    async function nextJob() {
+      K.loading = true;
+      try { const r = await api('picking', 'claim_next', { floor: S.floor, count: 1 }, true); if (r.names.length) Pick.open(r.names[0]); else flash('warn', 'No free Pick Lists on this floor'); }
+      catch (e) { flash('err', e.message); }
+      finally { K.loading = false; }
+    }
+    const hasBatch = !!EXT.screens.batch;
+    function batch() { const t = EXT.tiles.find(x => x.id === 'batch'); if (t) t.open(); }
+    return { S, K, rows, stops, stop, stopIdx, doneCount, pending, isDone, pickRow, skipStop, setOrder, save, back, fmt, daysAgo, nextJob, hasBatch, batch,
       open: n => Pick.open(n), again: () => { Pick.reset(); Pick.loadLists(); }, home: () => { Pick.reset(); go('home'); } };
   },
   template: `
@@ -815,13 +828,17 @@ const Pick = {
       <main class="ws-main">
         <Done v-if="K.result" :result="K.result" @again="again" @home="home"/>
         <template v-else-if="!K.pl">
-          <Prompt text="Scan a Pick List" hint="Or choose one of the draft Pick Lists for this floor."/>
+          <Prompt text="Scan a Pick List" hint="Or take the next job. Yours come first, then unassigned ones by delivery date."/>
+          <div class="ws-actions" v-if="K.lists && K.lists.length">
+            <button class="ws-btn primary" :disabled="K.loading" @click="nextJob">Next job</button>
+            <button v-if="hasBatch" class="ws-btn" @click="batch">Batch pick</button>
+          </div>
           <div v-if="K.loading" class="ws-muted">Loading…</div>
-          <button v-for="l in K.lists || []" :key="l.name" class="ws-line btn" @click="open(l.name)">
-            <div><b>{{l.name}}</b><small>{{l.customer || l.purpose}} · {{daysAgo(l.creation) === 0 ? 'today' : daysAgo(l.creation) + ' days ago'}}</small></div>
+          <button v-for="l in K.lists || []" :key="l.name" class="ws-line btn" :class="{taken: l.assigned.length && !l.mine}" @click="open(l.name)">
+            <div><b>{{l.customer || l.name}}</b><small><span v-if="l.mine" class="ws-who">Yours · </span><span v-else-if="l.assigned.length" class="ws-who">{{l.assigned_names.join(', ')}} · </span><span v-if="l.due">due {{l.due}} · </span>{{l.name}} · {{daysAgo(l.creation) === 0 ? 'today' : daysAgo(l.creation) + ' days ago'}}</small></div>
             <div class="ws-num">{{l.floor_rows}} <small>line{{l.floor_rows==1?'':'s'}}</small></div>
           </button>
-          <div v-if="K.lists && !K.lists.length" class="ws-muted">No draft Pick Lists on this floor in the last 30 days.</div>
+          <div v-if="K.lists && !K.lists.length" class="ws-muted">No draft Pick Lists on this floor.</div>
         </template>
         <template v-else>
           <div class="ws-seg" role="group" aria-label="Order">

@@ -316,7 +316,9 @@ def get_pick_list(name: str):
 	out = []
 	for r in rows:
 		place = places.get(r.warehouse) or {"mapped": False, "warehouse": r.warehouse}
+		pos = positions.get(r.warehouse)
 		out.append({
+			"grid": [_int(pos.row), _int(pos.col), _int(pos.level)] if pos else None,
 			"row_name": r.name, "idx": r.idx, "walk": order.get(r.name, r.idx),
 			"item_code": r.item_code, "item_name": r.item_name,
 			"qty": _flt(r.get("stock_qty")) or _flt(r.qty), "uom": r.get("stock_uom") or r.uom,

@@ -84,7 +84,8 @@ a{color:var(--accent)}
 .ws-line small.warn{color:var(--warn);font-weight:650}
 .ws-line.on{border-color:var(--accent);background:var(--accent-soft)}
 .ws-line.done{background:var(--surface2)}
-.ws-line.done b::before{content:"✓ ";color:var(--ok)}
+.ws-line.done > div > b::before{content:"✓ ";color:var(--ok)}
+.ws-line.taken{background:var(--surface2);opacity:.75}
 .ws-line.hit{animation:ws-hit .7s ease-out}
 @keyframes ws-hit{from{background:var(--ok-soft);border-color:var(--ok)}to{background:var(--surface2)}}
 .ws-num{flex-shrink:0;font-size:20px;font-weight:750;font-variant-numeric:tabular-nums;text-align:right}
@@ -189,6 +190,16 @@ a{color:var(--accent)}
 .ws-field input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
 .ws-line small.ws-fefo,.ws-fefo{display:block;margin-top:3px;font-weight:650;color:var(--warn);white-space:normal;overflow:visible}.ws-line small.ws-fefo.ok,.ws-fefo.ok{color:var(--ok)}
 .ws-chip.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.ws-tote{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13px;font-weight:650;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-tote b{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;border-radius:999px;background:var(--tc,#2563eb);color:#fff;font-size:12px}
+.ws-tote.mini{padding:1px 7px 1px 1px;font-size:12px;gap:4px}.ws-tote.mini b{min-width:18px;height:18px;font-size:11px}
+.ws-tote.short{border-color:var(--warn);color:var(--warn)}
+.ws-split{display:flex;flex-wrap:wrap;gap:8px;padding:12px;border-radius:var(--radius);background:var(--accent-soft)}
+.ws-split .ws-tote{font-size:18px;padding:6px 14px 6px 6px}.ws-split .ws-tote b{min-width:30px;height:30px;font-size:16px}
+.ws-line small.ws-totes{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;white-space:normal;overflow:visible}
+.t-batch .ws-ic{background:#e0e7ff;color:#4338ca}
+@media (prefers-color-scheme: dark){.t-batch .ws-ic{background:#1e1b4b;color:#a5b4fc}}
+.ws-who{font-weight:700;color:var(--accent)}
 .ws-addr{white-space:pre-line;font-size:13px;margin-top:4px}
 .ws-row2.wrap{flex-wrap:wrap}
 @media print{
