@@ -19,6 +19,7 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	parse_json,
 )
 from warehouse_theatre_3d.warehouse_theatre_3d.api.links import resolve_locations
+from warehouse_theatre_3d.warehouse_theatre_3d.api.packing import parse_carton
 from warehouse_theatre_3d.warehouse_theatre_3d.api.operations import (
 	_build_transfer,
 	_doc_url,
@@ -31,6 +32,8 @@ SCAN_DOCS = {
 	"Purchase Receipt": "putaway",
 	"Stock Entry": "putaway",
 	"Subcontracting Receipt": "putaway",
+	"Delivery Note": "pack",
+	"Sales Invoice": "pack",
 }
 MAPPED_TYPES = ("Bin", "Zone", "Slot", "Floor")
 
@@ -183,6 +186,16 @@ def resolve_code(code: str):
 				frappe.throw(_("You can't open {0} {1}.").format(doctype, code), frappe.PermissionError)
 			return {"kind": "document", "doctype": doctype, "name": code, "action": action,
 			        "docstatus": frappe.db.get_value(doctype, code, "docstatus")}
+
+	# A carton label from Pack: "<Delivery Note or Sales Invoice>/<carton no>".
+	carton = parse_carton(code)
+	if carton:
+		for doctype in ("Delivery Note", "Sales Invoice"):
+			if frappe.db.exists(doctype, carton[0]):
+				if not frappe.has_permission(doctype, "read", carton[0]):
+					frappe.throw(_("You can't open {0} {1}.").format(doctype, carton[0]), frappe.PermissionError)
+				return {"kind": "carton", "doctype": doctype, "name": carton[0], "no": carton[1], "code": code,
+				        "docstatus": frappe.db.get_value(doctype, carton[0], "docstatus")}
 
 	# A label typed by hand, e.g. "A3-L1": accept it when exactly one mapped warehouse has that name.
 	named = frappe.get_all(
