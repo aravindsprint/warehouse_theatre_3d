@@ -40,7 +40,8 @@ class TestLiveFlows(FrappeTestCase):
 			before_tests()
 		cls.company = frappe.db.get_single_value("Global Defaults", "default_company") or frappe.get_all("Company", pluck="name")[0]
 		cls.abbr = frappe.db.get_value("Company", cls.company, "abbr")
-		root = frappe.db.get_value("Warehouse", {"company": cls.company, "is_group": 1, "parent_warehouse": ["in", ["", None]]}, "name")
+		root = frappe.db.get_value("Warehouse", {"warehouse_name": "All Warehouses", "company": cls.company}) \
+			or frappe.db.get_value("Warehouse", {"company": cls.company, "is_group": 1, "parent_warehouse": ("is", "not set")})
 		cls.building = cls.wh("WT Building", root, 1, "Building")
 		cls.floor = cls.wh("WT Floor", cls.building, 1, "Floor")
 		cls.rack_a = cls.wh("WT Rack A", cls.floor, 1, "Slot", 0, 0)
