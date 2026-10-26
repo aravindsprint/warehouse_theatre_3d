@@ -41,6 +41,14 @@ doctype_js = {
     )
 }
 
+# Who picked a Pick List, for the Operations view (api/fulfillment.py).
+doc_events = {
+    "Pick List": {
+        "on_submit": "warehouse_theatre_3d.warehouse_theatre_3d.api.fulfillment.stamp_picker",
+        "on_cancel": "warehouse_theatre_3d.warehouse_theatre_3d.api.fulfillment.clear_picker",
+    },
+}
+
 scheduler_events = {
     "daily": [
         "warehouse_theatre_3d.alerts.send_capacity_alerts",

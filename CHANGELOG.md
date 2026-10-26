@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+Upgrading: run `bench migrate` (two new Pick List fields) and `bench build`.
+
+### Operations view
+
+A new **📦 Operations** view beside 3D / 2D / Health that shows where every delivery order is and gives each role its own dashboard.
+
+- **Order status in both ERPNext flows.** Each delivery Pick List is *Pending* (draft), *Picked* (submitted), *Packed* or *Dispatched*. With Delivery Notes: packed = a submitted Packing Slip on a draft Delivery Note, dispatched = Delivery Note submitted. With Sales Invoices that update stock: packed = draft invoice, dispatched = submitted. Partial dispatches and billing % (Delivery Note flow) are shown too.
+- **My work** (every role): Pick Lists waiting and assigned to me, what I picked and packed today and this week, lines picked in full, and my recent orders with where they are now.
+- **Orders** (every role): every open order with its stage, time in stage, who picked and packed it, and its Delivery Note / Sales Invoice; filter by stage, open a pending list's walking route.
+- **Team** (Stock Manager, System Manager): orders per stage, how long each stage takes (median and average), stuck orders (over 24 hours in a stage), dispatched and picked per day, pick accuracy, scanner use, a pickers and packers table, and Delivery Notes still to bill.
+- **System** (System Manager): mapping coverage, bins and zones without a capacity, warehouses holding stock that aren't on the map, pick lines from unmapped warehouses, and users per role.
+- New read-only **Picked By / Picked At** fields on Pick List, filled when a Pick List is submitted (from Warehouse Scan or the desk) and cleared on cancel. Lists submitted before this version show the picker as unknown.
+
 ## v2.0.0 (2026-10-24)
 
 - **Get updates (opt-in):** after a System Manager's second visit, the 3D app offers a small card to sign up for updates and help from the developer. Nothing is sent unless they tick the consent box and press Send. The card shows exactly what goes (name, email, optional company and phone, and the site's address), and never any stock or business data. *Not now* hides it for 30 days; *Don't ask again* hides it for good. Sign-ups arrive as Leads in the publisher's ERPNext through a public Web Form.
