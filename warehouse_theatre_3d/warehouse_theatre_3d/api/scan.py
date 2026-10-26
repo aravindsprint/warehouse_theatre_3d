@@ -11,6 +11,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	_flt,
 	_int,
@@ -160,6 +161,7 @@ def resolve_code(code: str):
 		frappe.throw(_("Nothing was scanned."))
 
 	if frappe.db.exists("Warehouse", code):
+		access.require_floor(code)
 		return _location(code)
 
 	barcode = frappe.db.get_value("Item Barcode", {"barcode": code}, ["parent", "uom"], as_dict=True)
@@ -204,6 +206,7 @@ def resolve_code(code: str):
 		pluck="name", limit=2,
 	)
 	if len(named) == 1:
+		access.require_floor(named[0])
 		return _location(named[0])
 
 	return {"kind": "unknown", "code": code}
@@ -244,7 +247,8 @@ def get_floor_locations(floor: str):
 	"""Every Bin and Zone on a floor with its stock, when it was last counted, and the
 	order to count them in."""
 	_require_view_permission()
-	bins = get_floor_bins(floor)
+	access.require_floor(floor)
+	bins = access.keep(get_floor_bins(floor), access.allowed_warehouses(), "wh")
 	whs = [b.wh for b in bins]
 	stock = {}
 	if whs:
@@ -401,6 +405,7 @@ def post_transfer(rows: str | list, submit: int | str = 0):
 def finish_count(warehouse: str, rows: str | list):
 	"""Record a count of one location: a draft Stock Reconciliation for any differences,
 	and the date it was counted (also when nothing differed)."""
+	access.require(warehouse)
 	result = create_stock_reconciliation(warehouse, rows)
 	if frappe.get_meta("Warehouse").has_field("wt_last_counted_on"):
 		frappe.db.set_value("Warehouse", warehouse, {

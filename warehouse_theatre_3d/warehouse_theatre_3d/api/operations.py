@@ -9,6 +9,7 @@ import copy
 import frappe
 from frappe.utils import nowdate
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	_flt,
 	_int,
@@ -58,6 +59,7 @@ def get_bin_stock(warehouse):
 	_require_view_permission()
 	if not frappe.db.exists("Warehouse", warehouse):
 		frappe.throw(f"Warehouse {warehouse} not found")
+	access.require(warehouse)
 	items = frappe.db.sql(
 		"""
 		SELECT b.item_code, i.item_name, i.stock_uom, b.actual_qty, b.reserved_qty,
@@ -178,6 +180,7 @@ def create_stock_reconciliation(warehouse, rows):
 	since reconciling them needs batch/serial detail.
 	"""
 	_require_view_permission()
+	access.require(warehouse)
 	rows = parse_json(rows, []) or []
 	if not frappe.db.exists("Warehouse", warehouse):
 		frappe.throw(f"Warehouse {warehouse} not found")
@@ -337,6 +340,7 @@ def _dock_position(floor, bins):
 @frappe.whitelist()
 def get_floor_meta(group_warehouse):
 	_require_view_permission()
+	access.require_floor(group_warehouse)
 	return {"dock_slot": frappe.db.get_value("Warehouse", group_warehouse, "wt_dock_slot")}
 
 
@@ -344,6 +348,7 @@ def get_floor_meta(group_warehouse):
 def save_dock(group_warehouse, slot_warehouse=None):
 	"""Remember which Slot is next to the receiving dock (used by putaway and routes)."""
 	_require_edit_permission()
+	access.require_floor(group_warehouse)
 	# A standalone Zone is its own floor, so it can be its own dock.
 	on_floor = slot_warehouse == group_warehouse or \
 		frappe.db.get_value("Warehouse", slot_warehouse, "parent_warehouse") == group_warehouse
@@ -404,7 +409,8 @@ def get_putaway_plan(group_warehouse, items):
 	if not requests:
 		frappe.throw("Add at least one item with a quantity.")
 
-	bins = get_floor_bins(group_warehouse)
+	access.require_floor(group_warehouse)
+	bins = access.keep(get_floor_bins(group_warehouse), access.allowed_warehouses(), "wh")
 	whs = [b.wh for b in bins]
 	caps = get_uom_capacities(whs)
 	used = get_uom_quantities(whs)
