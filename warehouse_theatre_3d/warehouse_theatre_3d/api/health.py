@@ -7,6 +7,7 @@ the moment the app is installed. Read-only.
 import frappe
 from frappe.utils import add_days, getdate, nowdate
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import _flt, _int, _require_view_permission
 
 HISTORY_DAYS = 730          # how far back movements are scanned; older counts as "over 2 years"
@@ -83,7 +84,7 @@ def classify_movement(items, moves, days, today, slow_cover_days=SLOW_COVER_DAYS
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
-def get_stock_health(company=None, days=90, expiry_days=60, refresh=0):
+def get_stock_health(company: str | None = None, days: int | str = 90, expiry_days: int | str = 60, refresh: int | str = 0):
 	"""Everything the Stock Health page shows, for one company or all.
 
 	days: period for dead stock / slow movers. expiry_days: how far ahead to look for
@@ -95,7 +96,7 @@ def get_stock_health(company=None, days=90, expiry_days=60, refresh=0):
 	key = f"wt3d:stock_health:{frappe.session.user}:{company or ''}:{days}:{expiry_days}"
 	cache = frappe.cache()
 	if not _int(refresh):
-		hit = cache.get_value(key)
+		hit = cache.get_value(key, expires=True)
 		if hit:
 			return hit
 	result = _compute(company or None, days, expiry_days)
@@ -111,6 +112,7 @@ def _compute(company, days, expiry_days):
 		"history_from": add_days(today, -HISTORY_DAYS),
 		"expiry_to": add_days(today, expiry_days),
 		"today": today,
+		**access.wh_filter(),   # the user's User Permissions on Warehouse / Company
 	}
 
 	bins = frappe.db.sql(
@@ -122,6 +124,7 @@ def _compute(company, days, expiry_days):
 		INNER JOIN `tabWarehouse` w ON w.name = b.warehouse
 		WHERE b.actual_qty != 0
 		  AND (%(company)s IS NULL OR w.company = %(company)s)
+		  AND (%(wh_all)s = 1 OR b.warehouse IN %(wh_list)s)
 		""",
 		p,
 		as_dict=True,
@@ -157,6 +160,7 @@ def _compute(company, days, expiry_days):
 			FROM `tabStock Ledger Entry`
 			WHERE is_cancelled = 0 AND posting_date >= %(history_from)s
 			  AND (%(company)s IS NULL OR company = %(company)s)
+			  AND (%(wh_all)s = 1 OR warehouse IN %(wh_list)s)
 			GROUP BY item_code
 			""",
 			p,
@@ -221,6 +225,7 @@ def _ageing(items, p, today):
 		FROM `tabStock Ledger Entry`
 		WHERE is_cancelled = 0 AND posting_date >= %(history_from)s
 		  AND (%(company)s IS NULL OR company = %(company)s)
+		  AND (%(wh_all)s = 1 OR warehouse IN %(wh_list)s)
 		GROUP BY item_code, voucher_type, voucher_no, posting_date
 		HAVING SUM(actual_qty) > 0
 		ORDER BY item_code, posting_date DESC
@@ -270,6 +275,7 @@ def _expiring_batches(p, today):
 		INNER JOIN `tabWarehouse` w ON w.name = sbb.warehouse
 		WHERE sbb.docstatus = 1 AND sbb.is_cancelled = 0 AND IFNULL(sbe.batch_no, '') != ''
 		  AND (%(company)s IS NULL OR w.company = %(company)s)
+		  AND (%(wh_all)s = 1 OR sbb.warehouse IN %(wh_list)s)
 		GROUP BY sbe.batch_no, sbb.warehouse
 		""",
 		# older entries that carry batch_no on the ledger row itself
@@ -278,6 +284,7 @@ def _expiring_batches(p, today):
 		FROM `tabStock Ledger Entry`
 		WHERE is_cancelled = 0 AND IFNULL(batch_no, '') != '' AND IFNULL(serial_and_batch_bundle, '') = ''
 		  AND (%(company)s IS NULL OR company = %(company)s)
+		  AND (%(wh_all)s = 1 OR warehouse IN %(wh_list)s)
 		GROUP BY batch_no, warehouse
 		""",
 	]
@@ -335,6 +342,7 @@ def _below_reorder(p):
 			LEFT JOIN `tabBin` b ON b.item_code = ir.parent AND b.warehouse = ir.warehouse
 			WHERE ir.parenttype = 'Item' AND ir.warehouse_reorder_level > 0
 			  AND (%(company)s IS NULL OR w.company = %(company)s)
+			  AND (%(wh_all)s = 1 OR ir.warehouse IN %(wh_list)s)
 			""",
 			p,
 			as_dict=True,

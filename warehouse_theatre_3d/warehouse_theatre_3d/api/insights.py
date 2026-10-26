@@ -5,8 +5,10 @@ and capacity alerts. Every endpoint here only reads data.
 from datetime import timedelta
 
 import frappe
+from frappe import _
 from frappe.utils import add_days, getdate, nowdate
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	_flt,
 	_int,
@@ -81,7 +83,7 @@ def daily_change_lists(deltas, from_date, to_date):
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
-def get_bin_metrics(group_warehouse, days=90):
+def get_bin_metrics(group_warehouse: str, days: int | str = 90):
 	"""Per-Bin metrics for the heatmap modes on one Floor.
 
 	velocity: outward movements in the last `days` days
@@ -92,7 +94,8 @@ def get_bin_metrics(group_warehouse, days=90):
 	"""
 	_require_view_permission()
 	days = max(1, min(_int(days) or 90, 730))
-	bins = get_floor_bins(group_warehouse)
+	access.require_floor(group_warehouse)
+	bins = access.keep(get_floor_bins(group_warehouse), access.allowed_warehouses(), "wh")
 	whs = [b.wh for b in bins]
 	metrics = {wh: {} for wh in whs}
 	if not whs:
@@ -242,7 +245,7 @@ def _add_expiry(metrics, params, today):
 	balances = _batch_balances(params)
 	if not balances:
 		return
-	batches = list({b for _, b in balances})
+	batches = list({b for _wh, b in balances})
 	expiry = {
 		r.name: r.expiry_date
 		for r in frappe.db.sql(
@@ -268,7 +271,7 @@ def _add_expiry(metrics, params, today):
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
-def search_items(txt="", limit=15):
+def search_items(txt: str = "", limit: int | str = 15):
 	_require_view_permission()
 	txt = (txt or "").strip()
 	if not txt:
@@ -288,7 +291,7 @@ def search_items(txt="", limit=15):
 
 
 @frappe.whitelist()
-def resolve_scan(code):
+def resolve_scan(code: str):
 	"""Turn a scanned barcode/QR value into an item (and an exact bin for serial numbers)."""
 	_require_view_permission()
 	code = (code or "").strip()
@@ -305,19 +308,20 @@ def resolve_scan(code):
 		return {"item_code": batch_item, "via": "batch", "batch_no": code}
 	serial = frappe.db.get_value("Serial No", code, ["item_code", "warehouse"], as_dict=True)
 	if serial:
-		return {"item_code": serial.item_code, "via": "serial_no", "warehouse": serial.warehouse}
+		return {"item_code": serial.item_code, "via": "serial_no",
+		        "warehouse": serial.warehouse if access.can_see(serial.warehouse) else None}
 	return None
 
 
 @frappe.whitelist()
-def locate_item(item_code, company=None):
+def locate_item(item_code: str, company: str | None = None):
 	"""Every warehouse holding the item, resolved to Floor/Slot/Bin where it is mapped."""
 	_require_view_permission()
 	if not item_code:
 		return {"item": None, "locations": []}
 	item = frappe.db.get_value("Item", item_code, ["name", "item_name", "stock_uom"], as_dict=True)
 	if not item:
-		frappe.throw(f"Item {item_code} not found")
+		frappe.throw(_("Item {0} not found").format(item_code))
 
 	rows = frappe.db.sql(
 		"""
@@ -347,7 +351,7 @@ def locate_item(item_code, company=None):
 		r["mapped"] = bool(r.wt_type in ("Bin", "Zone") and r.slot and r.floor)
 		r.pop("zone_floor", None)
 		r.pop("zone_floor_label", None)
-	return {"item": item, "locations": rows}
+	return {"item": item, "locations": access.keep(rows, access.allowed_warehouses(), "wh")}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -355,7 +359,7 @@ def locate_item(item_code, company=None):
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
-def get_timeline(group_warehouse, from_date=None, to_date=None):
+def get_timeline(group_warehouse: str, from_date: str | None = None, to_date: str | None = None):
 	"""Daily per-Bin, per-UOM balances on one Floor, rebuilt from the Stock Ledger."""
 	_require_view_permission()
 	to_date = getdate(to_date or nowdate())
@@ -365,7 +369,8 @@ def get_timeline(group_warehouse, from_date=None, to_date=None):
 	if (to_date - from_date).days > MAX_TIMELINE_DAYS:
 		from_date = to_date - timedelta(days=MAX_TIMELINE_DAYS)
 
-	whs = [b.wh for b in get_floor_bins(group_warehouse)]
+	access.require_floor(group_warehouse)
+	whs = [b.wh for b in access.keep(get_floor_bins(group_warehouse), access.allowed_warehouses(), "wh")]
 	if not whs:
 		return {"dates": [], "start": {}, "changes": [], "from_date": str(from_date), "to_date": str(to_date)}
 	params = {"whs": tuple(whs), "from": from_date, "to": to_date}
@@ -412,9 +417,10 @@ def get_timeline(group_warehouse, from_date=None, to_date=None):
 # Capacity alerts (UI badge; the daily email lives in warehouse_theatre_3d.alerts)
 # ─────────────────────────────────────────────────────────────
 
-def compute_capacity_alerts(company=None, bin_threshold=95, floor_threshold=85):
+def compute_capacity_alerts(company=None, bin_threshold=95, floor_threshold=85, allowed=None):
 	"""Bins and Floors whose fill % is at or above the thresholds. Only bins with a UOM
-	capacity configured are considered, since fill % is meaningless without one."""
+	capacity configured are considered, since fill % is meaningless without one.
+	allowed: only these warehouses (a user's User Permissions); None for all."""
 	bins = frappe.db.sql(
 		"""
 		SELECT b.name AS wh, b.warehouse_name AS label, s.name AS slot, s.warehouse_name AS slot_label,
@@ -442,7 +448,7 @@ def compute_capacity_alerts(company=None, bin_threshold=95, floor_threshold=85):
 		{"company": company or None},
 		as_dict=True,
 	)
-	bins = list(bins) + list(zones)
+	bins = access.keep(list(bins) + list(zones), allowed, "wh")
 	whs = [b.wh for b in bins]
 	caps = get_uom_capacities(whs)
 	qtys = get_uom_quantities(whs)
@@ -478,9 +484,9 @@ def get_alert_thresholds():
 
 
 @frappe.whitelist()
-def get_capacity_alerts(company=None):
+def get_capacity_alerts(company: str | None = None):
 	_require_view_permission()
 	bin_t, floor_t = get_alert_thresholds()
-	out = compute_capacity_alerts(company, bin_t, floor_t)
+	out = compute_capacity_alerts(company, bin_t, floor_t, access.allowed_warehouses())
 	out.update(bin_threshold=bin_t, floor_threshold=floor_t)
 	return out

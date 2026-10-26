@@ -9,7 +9,23 @@
   "enable_capacity_alerts",
   "bin_threshold",
   "floor_threshold",
-  "alert_recipients"
+  "alert_recipients",
+  "fulfillment_section",
+  "dispatch_document",
+  "require_carton_scan",
+  "inbound_section",
+  "qc_warehouse",
+  "hold_all_receipts",
+  "column_break_inbound",
+  "rejected_warehouse",
+  "returns_warehouse",
+  "ops_alerts_section",
+  "enable_ops_alerts",
+  "stuck_hours",
+  "notify_urgent_refills",
+  "column_break_ops",
+  "notify_expiring_days",
+  "ops_alert_email"
  ],
  "fields": [
   {
@@ -44,12 +60,115 @@
    "fieldname": "alert_recipients",
    "fieldtype": "Small Text",
    "label": "Alert Recipients"
+  },
+  {
+   "fieldname": "fulfillment_section",
+   "fieldtype": "Section Break",
+   "label": "Pack and dispatch"
+  },
+  {
+   "fieldname": "dispatch_document",
+   "fieldtype": "Select",
+   "label": "Dispatch with",
+   "options": "Delivery Note\nSales Invoice",
+   "default": "Delivery Note",
+   "description": "What Warehouse Scan creates when you start packing a Pick List. Delivery Note: each carton becomes a Packing Slip. Sales Invoice: an invoice with Update Stock on."
+  },
+  {
+   "fieldname": "require_carton_scan",
+   "fieldtype": "Check",
+   "label": "Scan every carton before dispatch",
+   "default": "0",
+   "description": "Dispatch in Warehouse Scan waits until each carton label of the order has been scanned onto the vehicle."
+  },
+  {
+   "fieldname": "inbound_section",
+   "fieldtype": "Section Break",
+   "label": "Receiving and returns"
+  },
+  {
+   "fieldname": "qc_warehouse",
+   "fieldtype": "Link",
+   "label": "Quality hold warehouse",
+   "options": "Warehouse",
+   "description": "Receipts of items with “Inspection Required before Purchase” (or every receipt, below) go here until released to putaway or rejected."
+  },
+  {
+   "fieldname": "hold_all_receipts",
+   "fieldtype": "Check",
+   "label": "Hold every receipt for checking",
+   "default": "0"
+  },
+  {
+   "fieldname": "column_break_inbound",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rejected_warehouse",
+   "fieldtype": "Link",
+   "label": "Rejected warehouse",
+   "options": "Warehouse",
+   "description": "Damaged goods found at receiving, failed checks and damaged customer returns."
+  },
+  {
+   "fieldname": "returns_warehouse",
+   "fieldtype": "Link",
+   "label": "Returns warehouse",
+   "options": "Warehouse",
+   "description": "Where good customer returns go before putaway. Blank: back to the warehouse they were sent from."
+  },
+  {
+   "fieldname": "ops_alerts_section",
+   "fieldtype": "Section Break",
+   "label": "Operations alerts"
+  },
+  {
+   "fieldname": "enable_ops_alerts",
+   "fieldtype": "Check",
+   "label": "Send operations alerts",
+   "default": "0",
+   "description": "Notifications in the bell (and by email, per each user's notification settings)."
+  },
+  {
+   "fieldname": "stuck_hours",
+   "fieldtype": "Int",
+   "label": "Order stuck after (hours)",
+   "default": "24",
+   "depends_on": "enable_ops_alerts",
+   "description": "Stock Managers hear about orders that sit this long in picking, packing or dispatch."
+  },
+  {
+   "fieldname": "notify_urgent_refills",
+   "fieldtype": "Check",
+   "label": "Alert on urgent refills",
+   "default": "1",
+   "depends_on": "enable_ops_alerts",
+   "description": "Stock Users and Managers hear when draft picks need more than a pick shelf holds."
+  },
+  {
+   "fieldname": "column_break_ops",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "notify_expiring_days",
+   "fieldtype": "Int",
+   "label": "Alert on batches expiring within (days)",
+   "default": "7",
+   "depends_on": "enable_ops_alerts",
+   "description": "0 turns this off."
+  },
+  {
+   "fieldname": "ops_alert_email",
+   "fieldtype": "Check",
+   "label": "Daily email digest to Alert Recipients",
+   "default": "0",
+   "depends_on": "enable_ops_alerts"
   }
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-21 00:00:00.000000",
+ "modified": "2026-10-27 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Warehouse Theatre 3D Module",
  "name": "Warehouse Theatre Settings",

@@ -37,7 +37,7 @@ doctype_js = {
     dt: "public/js/wt3d_forms.js"
     for dt in (
         "Item", "Warehouse", "Stock Entry", "Purchase Receipt", "Purchase Invoice",
-        "Subcontracting Receipt", "Delivery Note", "Sales Invoice", "Pick List", "Material Request",
+        "Subcontracting Receipt", "Delivery Note", "Sales Invoice", "Pick List", "Material Request", "Purchase Order",
     )
 }
 
@@ -50,7 +50,11 @@ doc_events = {
 }
 
 scheduler_events = {
+    "hourly": [
+        "warehouse_theatre_3d.warehouse_theatre_3d.api.notify.hourly",
+    ],
     "daily": [
         "warehouse_theatre_3d.alerts.send_capacity_alerts",
+        "warehouse_theatre_3d.warehouse_theatre_3d.api.notify.daily",
     ],
 }

@@ -5,8 +5,10 @@ lives; the server only supplies pick rows and saves a new row order on request.
 """
 
 import frappe
+from frappe import _
 from frappe.utils import add_days, nowdate
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	_flt,
 	_int,
@@ -19,11 +21,13 @@ MAX_LISTS = 300
 
 
 def _floor_whs(floor):
-	return [b.wh for b in get_floor_bins(floor)]
+	"""Stock locations on a Floor that the user may see."""
+	access.require_floor(floor)
+	return [b.wh for b in access.keep(get_floor_bins(floor), access.allowed_warehouses(), "wh")]
 
 
 @frappe.whitelist()
-def get_pick_lists(group_warehouse, days=30, limit=50):
+def get_pick_lists(group_warehouse: str, days: int | str = 30, limit: int | str = 50):
 	"""Recent Pick Lists with at least one row on this Floor."""
 	_require_view_permission()
 	whs = _floor_whs(group_warehouse)
@@ -85,7 +89,7 @@ def _rows_for(names):
 
 
 @frappe.whitelist()
-def get_pick_rows(names):
+def get_pick_rows(names: str | list | dict):
 	"""Rows (in their saved order) for the given Pick Lists."""
 	_require_view_permission()
 	names = [n for n in (parse_json(names, []) or []) if n][:MAX_LISTS]
@@ -93,12 +97,12 @@ def get_pick_rows(names):
 		return []
 	for n in names:
 		if not frappe.has_permission("Pick List", "read", n):
-			frappe.throw(f"Not permitted to read Pick List {n}", frappe.PermissionError)
+			frappe.throw(_("Not permitted to read Pick List {0}").format(n), frappe.PermissionError)
 	return _rows_for(names)
 
 
 @frappe.whitelist()
-def get_period_pick_rows(group_warehouse, days=30):
+def get_period_pick_rows(group_warehouse: str, days: int | str = 30):
 	"""All Pick Lists touching this Floor in the period, for the aisle-traffic overlay."""
 	_require_view_permission()
 	lists = get_pick_lists(group_warehouse, days=days, limit=MAX_LISTS)
@@ -117,13 +121,13 @@ def reorder_rows(rows, order):
 
 
 @frappe.whitelist(methods=["POST"])
-def reorder_pick_list(name, order):
+def reorder_pick_list(name: str, order: str | list | dict):
 	"""Save the optimised walking order onto a draft Pick List."""
 	_require_view_permission()
 	order = parse_json(order, []) or []
 	doc = frappe.get_doc("Pick List", name)
 	if doc.docstatus != 0:
-		frappe.throw("Only draft Pick Lists can be reordered.")
+		frappe.throw(_("Only draft Pick Lists can be reordered."))
 	doc.check_permission("write")
 	new_idx = reorder_rows([{"name": r.name, "idx": r.idx} for r in doc.locations], order)
 	for r in doc.locations:

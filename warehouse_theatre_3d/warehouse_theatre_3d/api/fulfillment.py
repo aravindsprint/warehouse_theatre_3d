@@ -30,8 +30,10 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 
 import frappe
+from frappe import _
 from frappe.utils import add_days, getdate, now_datetime, nowdate
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	EDIT_ROLES,
 	_flt,
@@ -369,7 +371,7 @@ def _has(doctype, field):
 
 def _pick_lists(company, days, floor):
 	p = {"company": company or None, "from": add_days(nowdate(), -days), "limit": MAX_ORDERS,
-	     "any_floor": 1, "whs": ("",)}
+	     "any_floor": 1, "whs": ("",), **access.wh_filter()}
 	if floor:
 		whs = [b.wh for b in get_floor_bins(floor)]
 		if not whs:
@@ -385,6 +387,8 @@ def _pick_lists(company, days, floor):
 		  AND (%(company)s IS NULL OR pl.company = %(company)s)
 		  AND (%(any_floor)s = 1 OR EXISTS (
 		        SELECT 1 FROM `tabPick List Item` f WHERE f.parent = pl.name AND f.warehouse IN %(whs)s))
+		  AND (%(wh_all)s = 1 OR EXISTS (
+		        SELECT 1 FROM `tabPick List Item` a WHERE a.parent = pl.name AND a.warehouse IN %(wh_list)s))
 		ORDER BY pl.creation DESC
 		LIMIT %(limit)s
 		""",
@@ -529,12 +533,13 @@ def _full_names(users):
 
 def _system_view(company, orders):
 	"""Setup and data quality for System Managers."""
-	p = {"company": company or None}
+	p = {"company": company or None, **access.wh_filter()}
 	mapped = {r.t: _int(r.n) for r in frappe.db.sql(
 		"""
 		SELECT wt_warehouse_type AS t, COUNT(*) AS n FROM `tabWarehouse`
 		WHERE IFNULL(wt_warehouse_type, '') != '' AND disabled = 0
 		  AND (%(company)s IS NULL OR company = %(company)s)
+		  AND (%(wh_all)s = 1 OR name IN %(wh_list)s)
 		GROUP BY wt_warehouse_type
 		""", p, as_dict=True)}
 	unmapped = frappe.db.sql(
@@ -543,6 +548,7 @@ def _system_view(company, orders):
 		FROM `tabBin` b INNER JOIN `tabWarehouse` w ON w.name = b.warehouse
 		WHERE b.actual_qty > 0 AND IFNULL(w.wt_warehouse_type, '') = '' AND w.is_group = 0
 		  AND (%(company)s IS NULL OR w.company = %(company)s)
+		  AND (%(wh_all)s = 1 OR w.name IN %(wh_list)s)
 		GROUP BY w.name ORDER BY value DESC
 		""", p, as_dict=True)
 	no_capacity = _int(frappe.db.sql(
@@ -550,6 +556,7 @@ def _system_view(company, orders):
 		SELECT COUNT(*) FROM `tabWarehouse` w
 		WHERE w.wt_warehouse_type IN ('Bin', 'Zone') AND w.disabled = 0
 		  AND (%(company)s IS NULL OR w.company = %(company)s)
+		  AND (%(wh_all)s = 1 OR w.name IN %(wh_list)s)
 		  AND NOT EXISTS (SELECT 1 FROM `tabWarehouse UOM Capacity` c WHERE c.parent = w.name AND c.capacity > 0)
 		""", p)[0][0])
 	stock_whs = frappe.db.sql(
@@ -557,6 +564,7 @@ def _system_view(company, orders):
 		SELECT COUNT(DISTINCT w.name) FROM `tabWarehouse` w
 		WHERE w.wt_warehouse_type IN ('Bin', 'Zone') AND w.disabled = 0
 		  AND (%(company)s IS NULL OR w.company = %(company)s)
+		  AND (%(wh_all)s = 1 OR w.name IN %(wh_list)s)
 		""", p)[0][0]
 	roles = {r.role: _int(r.n) for r in frappe.db.sql(
 		"""
@@ -592,7 +600,8 @@ def _capacity_alert_count(company):
 	try:
 		from warehouse_theatre_3d.warehouse_theatre_3d.api.insights import compute_capacity_alerts, get_alert_thresholds
 		bin_t, floor_t = get_alert_thresholds()
-		return len(compute_capacity_alerts(company, bin_t, floor_t)["bins"])
+		from warehouse_theatre_3d.warehouse_theatre_3d.api import access
+		return len(compute_capacity_alerts(company, bin_t, floor_t, access.allowed_warehouses())["bins"])
 	except Exception:
 		return None
 
@@ -611,19 +620,19 @@ def _serialise(o, can_see):
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist(allow_guest=False)
-def get_operations(company=None, days=30, floor=None, refresh=0):
+def get_operations(company: str | None = None, days: int | str = 30, floor: str | None = None, refresh: int | str = 0):
 	"""Everything the Operations view shows. Every view role gets Orders and My work;
 	Stock Managers and System Managers also get Team; System Managers also get System.
 	Cached for two minutes per user and filter."""
 	_require_view_permission()
 	if not frappe.has_permission("Pick List", "read"):
-		frappe.throw("You need read access to Pick Lists to see fulfillment status.", frappe.PermissionError)
+		frappe.throw(_("You need read access to Pick Lists to see fulfillment status."), frappe.PermissionError)
 	days = max(1, min(_int(days) or 30, 180))
 	user = frappe.session.user
 	key = f"wt3d:operations:{user}:{company or ''}:{days}:{floor or ''}"
 	cache = frappe.cache()
 	if not _int(refresh):
-		hit = cache.get_value(key)
+		hit = cache.get_value(key, expires=True)
 		if hit:
 			return hit
 
