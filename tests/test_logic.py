@@ -95,6 +95,8 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.packing import (  # noqa: E40
 	parse_carton,
 )
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.pallets import merge_contents, shortfalls  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.slotting import abc_classes, location_cost, suggest_moves  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.inbound import receipt_plan, return_plan  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.picking import combine_walk, queue_order, split_pick  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.replenish import (  # noqa: E402
@@ -663,6 +665,44 @@ class TestInbound(unittest.TestCase):
 		for bad in ([{"line": "x", "good": 5}], [{"line": "x", "good": 3, "damaged": 2}], [{"line": "q", "good": 1}], []):
 			with self.assertRaises(ValueError):
 				return_plan(lines, bad)
+
+
+class TestSlotting(unittest.TestCase):
+	def test_abc(self):
+		picks = {"a": 60, "b": 25, "c": 10, "d": 4, "e": 1, "z": 0}
+		self.assertEqual(abc_classes(picks), {"a": "A", "b": "A", "c": "B", "d": "C", "e": "C", "z": "C"})
+		self.assertEqual(abc_classes({}), {})
+
+	def test_location_cost(self):
+		self.assertAlmostEqual(location_cost({"row": 2, "col": 1, "level": 2}, (0, 0)), 11.4)
+
+	def test_suggest_moves(self):
+		bins = [{"wh": f"r{r}c{c}", "row": r, "col": c, "level": 0} for r in range(3) for c in range(2)]
+		stock = {"r2c1": {"fast": 10}, "r0c0": {"slow": 5}, "r0c1": {"other": 1, "more": 1}, "r1c1": {"mid": 3}}
+		picks = {"fast": 100, "slow": 1, "mid": 5, "other": 2, "more": 1}
+		moves = suggest_moves(bins, stock, picks, (0, 0))
+		self.assertEqual(len(moves), 1)
+		m = moves[0]
+		# The nearest location holds a single slow mover: swap with it.
+		self.assertEqual((m["item_code"], m["from"], m["to"], m["swap"], m["swap_qty"]), ("fast", "r2c1", "r0c0", "slow", 5))
+		self.assertEqual(m["saving"], round(2 * (location_cost(bins[5], (0, 0)) - 0) * 100, 1))
+		# Already close: nothing to do.
+		self.assertEqual(suggest_moves(bins, {"r0c0": {"fast": 1}}, {"fast": 50}, (0, 0)), [])
+		self.assertEqual(suggest_moves([], {}, {}, (0, 0)), [])
+
+
+class TestPallets(unittest.TestCase):
+	def test_merge_contents(self):
+		rows = [{"item_code": "A", "qty": 2}, {"item_code": "A", "qty": 3}, {"item_code": "A", "qty": 1, "batch_no": "B1"},
+		        {"item_code": "C", "qty": 0}, {"item_code": "", "qty": 4}]
+		self.assertEqual(merge_contents(rows), [{"item_code": "A", "batch_no": None, "qty": 5}, {"item_code": "A", "batch_no": "B1", "qty": 1}])
+		with self.assertRaises(ValueError):
+			merge_contents([{"item_code": "A", "qty": -1}])
+
+	def test_shortfalls(self):
+		contents = [{"item_code": "A", "qty": 5}, {"item_code": "A", "qty": 1}, {"item_code": "B", "qty": 2}]
+		self.assertEqual(shortfalls(contents, {"A": 6, "B": 1}), [{"item_code": "B", "need": 2, "have": 1}])
+		self.assertEqual(shortfalls(contents, {"A": 6, "B": 2}), [])
 
 
 if __name__ == "__main__":

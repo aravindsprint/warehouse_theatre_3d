@@ -94,6 +94,27 @@ WarehouseTheatre3D.register(core => {
     } catch (e) { rep.error = 'Could not load refills: ' + e.message; }
     finally { rep.loading = false; }
   }
+  // Slotting tab (api/slotting.py): per floor.
+  const slot = reactive({ data: null, loading: false, error: '', chosen: {}, posting: false, made: null, key: '', days: 90 });
+  async function loadSlot(force) {
+    if (!store.curGrp) { slot.error = 'Open a floor first.'; return; }
+    const key = store.curGrp.id + '|' + slot.days;
+    if (!force && slot.data && slot.key === key) return;
+    slot.loading = true; slot.error = ''; slot.made = null;
+    try {
+      slot.data = await core.api('slotting', 'get_slotting', { floor: store.curGrp.id, days: slot.days });
+      slot.key = key; slot.chosen = {};
+    } catch (e) { slot.error = 'Could not work out slotting: ' + e.message; }
+    finally { slot.loading = false; }
+  }
+  async function makeMoves() {
+    const moves = slot.data.moves.filter(m => slot.chosen[m.item_code]);
+    if (!moves.length) return;
+    slot.posting = true;
+    try { slot.made = await core.api('slotting', 'create_moves', { moves: JSON.stringify(moves) }, true); }
+    catch (e) { slot.error = e.message; }
+    finally { slot.posting = false; }
+  }
   async function makeTransfer() {
     const rows = [];
     rep.data.tasks.filter(t => rep.chosen[t.name]).forEach(t => t.sources.forEach(s => rows.push({ item_code: t.item_code, qty: s.qty, s_warehouse: s.warehouse, t_warehouse: t.warehouse })));
@@ -151,7 +172,7 @@ WarehouseTheatre3D.register(core => {
       const access = computed(() => (d.value && d.value.access) || {});
       const tabs = computed(() => {
         const t = [{ id: 'me', label: 'My work' }, { id: 'orders', label: 'Orders' }, { id: 'replenish', label: 'Replenish' }];
-        if (access.value.manager) t.push({ id: 'team', label: 'Team' });
+        if (access.value.manager) t.push({ id: 'team', label: 'Team' }, { id: 'slotting', label: 'Slotting' });
         if (access.value.admin) t.push({ id: 'system', label: 'System' });
         return t;
       });
@@ -161,7 +182,8 @@ WarehouseTheatre3D.register(core => {
         return access.value.manager ? 'team' : 'me';
       });
       function setTab(id) { state.tab = id; try { localStorage.setItem('wt3d-ops-tab', id); } catch (e) {} if (id === 'replenish') loadRep(false); }
-      watch(tab, v => { if (v === 'replenish') loadRep(false); }, { immediate: true });
+      watch(tab, v => { if (v === 'replenish') loadRep(false); if (v === 'slotting') loadSlot(false); }, { immediate: true });
+      watch(() => store.curGrp && store.curGrp.id, () => { if (tab.value === 'slotting') loadSlot(false); });
       function setFloorOnly(v) { state.floorOnly = v; try { localStorage.setItem('wt3d-ops-floor', v ? '1' : '0'); } catch (e) {} load(false); }
 
       const byName = computed(() => {
@@ -195,7 +217,7 @@ WarehouseTheatre3D.register(core => {
         return list.map(x => ({ ...x, h: Math.round(100 * x.n / max) }));
       }
 
-      return { rep, loadRep, makeTransfer, state, store, d, access, tabs, tab, setTab, setFloorOnly, counts, orders, pick, who, hrs, pct, docUrl,
+      return { slot, loadSlot, makeMoves, rep, loadRep, makeTransfer, state, store, d, access, tabs, tab, setTab, setFloorOnly, counts, orders, pick, who, hrs, pct, docUrl,
         shortDate, series, funnelMax, setStage, load, STAGE_LABEL, STAGE_COLOR, STAGE_HELP, TIME_LABELS,
         STAGES: ['pending', 'picked', 'packed', 'dispatched'],
         route: n => core.routes && core.routes.openFor(n),
@@ -359,6 +381,61 @@ WarehouseTheatre3D.register(core => {
                     <span v-if="rep.made" class="wtf-ok">Draft {{rep.made.name}} with {{rep.made.rows}} lines. <a class="wtf-link" :href="rep.made.url" target="_blank" rel="noopener">Open ↗</a></span>
                   </div>
                 </template>
+              </template>
+            </template>
+
+            <!-- ───────── Slotting ───────── -->
+            <template v-else-if="tab==='slotting'">
+              <div v-if="slot.error" class="wtf-err" role="alert">{{slot.error}}</div>
+              <div v-if="slot.loading && !slot.data" class="wth-load"><span class="wtf-spin"></span> Ranking items by picks…</div>
+              <template v-else-if="slot.data">
+                <div class="wth-head" style="margin-bottom:8px">
+                  <div class="wth-sub">{{store.curGrp ? store.curGrp.name : ''}} · {{slot.data.total_picks}} pick lines in {{slot.data.days}} days · distances from {{slot.data.dock_slot ? 'the dock' : 'the floor corner (set the dock in Putaway for better advice)'}}</div>
+                  <select class="wtf-inp" v-model.number="slot.days" @change="loadSlot(true)" aria-label="Period" style="width:auto;height:30px">
+                    <option :value="30">Last 30 days</option><option :value="90">Last 90 days</option><option :value="180">Last 180 days</option>
+                  </select>
+                </div>
+                <div class="wth-cards">
+                  <div v-for="k in ['A','B','C']" :key="k" :class="['wth-card', k==='A' ? 'info' : 'ok']">
+                    <div class="wth-cl">Class {{k}}</div><div class="wth-cv">{{slot.data.summary[k].items}}</div>
+                    <div class="wth-cd">items · {{slot.data.total_picks ? Math.round(100 * slot.data.summary[k].picks / slot.data.total_picks) : 0}}% of picks</div>
+                  </div>
+                  <div :class="['wth-card', slot.data.moves.length ? 'warn' : 'ok']">
+                    <div class="wth-cl">Walking you could save</div><div class="wth-cv">{{slot.data.saving >= 1000 ? (slot.data.saving/1000).toFixed(1) + ' km' : slot.data.saving + ' m'}}</div>
+                    <div class="wth-cd">over {{slot.data.days}} days with the moves below</div>
+                  </div>
+                </div>
+                <div class="wth-note">A items make up 80% of picks. Fast movers in the costlier half of the floor (far from the dock or on high shelves) move to the nearest empty location, or swap with a slow mover sitting there.</div>
+                <div class="wth-tw" style="margin-bottom:10px"><table class="wth-t" style="min-width:760px">
+                  <thead><tr><th></th><th>Item</th><th class="r">Picks</th><th>From</th><th>To</th><th>Swap with</th><th class="r">Saves</th></tr></thead>
+                  <tbody>
+                    <tr v-for="m in slot.data.moves" :key="m.item_code">
+                      <td><input type="checkbox" v-model="slot.chosen[m.item_code]" :aria-label="'Move ' + m.item_code"/></td>
+                      <td><div class="wth-code">{{m.item_code}}</div><div class="wth-name">{{m.item_name}}</div></td>
+                      <td class="r">{{m.picks}}</td>
+                      <td>{{m.from_label}} <span class="wto-muted">· {{Math.round(m.from_cost)}} m</span></td>
+                      <td>{{m.to_label}} <span class="wto-muted">· {{Math.round(m.to_cost)}} m</span></td>
+                      <td>{{m.swap ? m.swap + ' (' + m.swap_qty + ')' : 'empty'}}</td>
+                      <td class="r"><b>{{m.saving >= 1000 ? (m.saving / 1000).toFixed(1) + ' km' : Math.round(m.saving) + ' m'}}</b></td>
+                    </tr>
+                    <tr v-if="!slot.data.moves.length"><td colspan="7" class="wth-empty">Fast movers are already in the best places. 👍</td></tr>
+                  </tbody>
+                </table></div>
+                <div v-if="slot.data.moves.length" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+                  <button class="wtf-btn wtf-btn-pri" :disabled="slot.posting || !Object.values(slot.chosen).some(Boolean)" @click="makeMoves"><span v-if="slot.posting" class="wtf-spin"></span>Create moves (draft)</button>
+                  <span v-if="slot.made" class="wtf-ok">Draft {{slot.made.name}} with {{slot.made.rows}} lines. <a class="wtf-link" :href="slot.made.url" target="_blank" rel="noopener">Open ↗</a></span>
+                </div>
+                <div class="wto-bt" style="margin-bottom:6px">Most picked items</div>
+                <div class="wth-tw"><table class="wth-t">
+                  <thead><tr><th>Item</th><th>Class</th><th class="r">Picks</th><th>Where</th></tr></thead>
+                  <tbody>
+                    <tr v-for="it in slot.data.items.slice(0, 30)" :key="it.item_code">
+                      <td><div class="wth-code">{{it.item_code}}</div><div class="wth-name">{{it.item_name}}</div></td>
+                      <td><span :class="['wth-chip', it.class==='A' ? 'ok' : it.class==='B' ? 'warn' : '']">{{it.class}}</span></td>
+                      <td class="r">{{it.picks}}</td><td>{{it.locations.join(', ') || 'not on this floor now'}}</td>
+                    </tr>
+                  </tbody>
+                </table></div>
               </template>
             </template>
 

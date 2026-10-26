@@ -4,6 +4,11 @@
 
 Upgrading: run `bench migrate` (new Pick List and Sales Invoice fields, new settings) and `bench build`.
 
+### Slotting advice and pallets
+
+- **Operations → Slotting** (Stock Manager): items on the open floor ranked A / B / C by how often they were picked (A = the first 80% of picks). Fast movers sitting in the costlier half of the floor (far from the dock or on high shelves) get a suggested move to the nearest empty location, or a swap with a slow mover there, with the walking saved over the period. **Create moves (draft)** makes one Material Transfer for the ones you tick (both directions for a swap). Distances use the same model as putaway, from the dock set in Putaway.
+- **Warehouse Scan → Pallets:** build a pallet by scanning its location and what's on it, print its label (QR), and later move it by scanning the label and the new location: one Material Transfer moves everything on it. A pallet whose contents no longer match the shelf is flagged before it can move. A broken-up pallet can be emptied. New **Warehouse Pallet** list in ERPNext.
+
 ### Receiving, quality hold and customer returns
 
 - **Warehouse Scan → Receive:** Purchase Orders still to receive, oldest due first (or scan the PO). Scan what arrived: each scan adds one, a box barcode adds the box, tap a line to type. Switch to **Damaged** to count damaged goods apart; they're received as ERPNext's rejected quantity into the Rejected warehouse. Add the supplier's delivery note number, and **Receive** posts a Purchase Receipt made with ERPNext's own *Make Purchase Receipt*, then offers **Put it away**. Receipts that ERPNext needs a Quality Inspection for, or batch/serial items, are saved as drafts with the reason.
