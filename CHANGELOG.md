@@ -4,6 +4,16 @@
 
 Upgrading: run `bench migrate` (two new Pick List fields) and `bench build`.
 
+### Per-warehouse access (User Permissions)
+
+The app now respects ERPNext **User Permissions** on Warehouse and Company everywhere it reads stock. Before, most screens read the database directly, so a user limited to one warehouse could still see every floor and all its stock.
+
+- A user limited to some warehouses (a group warehouse includes everything under it, as in ERPNext) or some companies sees only those: floors, racks and bins in 3D and 2D, the summary, heatmaps, timeline replay, item locate, capacity alerts, Stock Health, pick routes, putaway suggestions, the Operations view and Warehouse Scan (look up, labels, count queue).
+- A floor stays openable when the user has access to anything on it; racks and bins they can't see are left out.
+- Opening a warehouse or floor they can't see (from a link, a scan or the API) is refused.
+- Only permissions that apply to all doctypes (blank *Applicable For*) or to Warehouse limit the map; one set only for, say, Sales Invoice does not.
+- Writes were already safe: moves, counts, picks and packing go through ERPNext documents, which check User Permissions themselves.
+
 ### Operations view
 
 A new **📦 Operations** view beside 3D / 2D / Health that shows where every delivery order is and gives each role its own dashboard.
