@@ -95,6 +95,7 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.packing import (  # noqa: E40
 	parse_carton,
 )
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.inbound import receipt_plan, return_plan  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.picking import combine_walk, queue_order, split_pick  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.replenish import (  # noqa: E402
 	allocate_sources,
@@ -635,6 +636,33 @@ class TestPicking(unittest.TestCase):
 		]
 		# F1 has most lines, so first; row 0 left to right, then row 2; F2 after; unmapped last.
 		self.assertEqual(combine_walk(rows), ["b2", "b1", "a1", "a2", "x"])
+
+
+class TestInbound(unittest.TestCase):
+	PO = [{"line": "a", "pending": 10, "inspect": False}, {"line": "b", "pending": 5, "inspect": True}]
+
+	def test_receipt_plan(self):
+		out = receipt_plan(self.PO, [{"line": "a", "good": 8, "damaged": 2}, {"line": "b", "good": 6, "damaged": 0},
+		                             {"line": "a2", "good": 0, "damaged": 0}])
+		self.assertEqual(out, [
+			{"line": "a", "qty": 8, "rejected": 2, "hold": False, "over": False},
+			{"line": "b", "qty": 6, "rejected": 0, "hold": True, "over": True},
+		])
+		self.assertTrue(all(p["hold"] for p in receipt_plan(self.PO, [{"line": "a", "good": 1}], hold_all=True)))
+		# Only damaged goods: nothing to hold for checking.
+		self.assertFalse(receipt_plan(self.PO, [{"line": "b", "good": 0, "damaged": 2}])[0]["hold"])
+		for bad in ([{"line": "z", "good": 1}], [{"line": "a", "good": -1}], [], [{"line": "a", "good": 0}]):
+			with self.assertRaises(ValueError):
+				receipt_plan(self.PO, bad)
+
+	def test_return_plan(self):
+		lines = [{"line": "x", "returnable": 4}, {"line": "y", "returnable": 2}]
+		self.assertEqual(return_plan(lines, [{"line": "x", "good": 3, "damaged": 1}, {"line": "y", "damaged": 2}]), [
+			{"line": "x", "qty": 3, "condition": "good"}, {"line": "x", "qty": 1, "condition": "damaged"},
+			{"line": "y", "qty": 2, "condition": "damaged"}])
+		for bad in ([{"line": "x", "good": 5}], [{"line": "x", "good": 3, "damaged": 2}], [{"line": "q", "good": 1}], []):
+			with self.assertRaises(ValueError):
+				return_plan(lines, bad)
 
 
 if __name__ == "__main__":

@@ -91,10 +91,34 @@ test('invoices only when they update stock; new documents never', () => {
   assert.equal(noStock.buttons.length, 0);
   const withStock = form('Sales Invoice', { name: 'SI-2', docstatus: 1, update_stock: 1 });
   refresh(env, withStock);
-  assert.equal(withStock.buttons.length, 1);
+  assert.deepEqual(withStock.buttons.map(b => b.label), ['Show on warehouse map', 'Return with scanner']);
   const fresh = form('Stock Entry', { name: 'new-stock-entry-1', docstatus: 0 }, true);
   refresh(env, fresh);
   assert.equal(fresh.buttons.length, 0);
+});
+
+test('pack and dispatch on drafts, receive on open POs, return on deliveries', () => {
+  const env = load();
+  const dn = form('Delivery Note', { name: 'DN-1', docstatus: 0 });
+  refresh(env, dn);
+  assert.deepEqual(dn.buttons.map(b => b.label), ['Show on warehouse map', 'Pack with scanner', 'Dispatch with scanner']);
+  dn.buttons[2].fn();
+  assert.match(env.opened.pop(), /warehouse-scan\?dispatch=DN-1&doctype=Delivery\+Note/);
+  const sent = form('Delivery Note', { name: 'DN-2', docstatus: 1 });
+  refresh(env, sent);
+  assert.deepEqual(sent.buttons.map(b => b.label), ['Show on warehouse map', 'Return with scanner']);
+  const ret = form('Delivery Note', { name: 'DN-3', docstatus: 1, is_return: 1 });
+  refresh(env, ret);
+  assert.deepEqual(ret.buttons.map(b => b.label), ['Show on warehouse map']);
+  const pl = form('Pick List', { name: 'PL-1', docstatus: 1, purpose: 'Delivery' });
+  refresh(env, pl);
+  assert.ok(pl.buttons.some(b => b.label === 'Pack with scanner'));
+  const po = form('Purchase Order', { name: 'PO-1', docstatus: 1, per_received: 40 });
+  refresh(env, po);
+  assert.deepEqual(po.buttons.map(b => b.label), ['Receive with scanner']);
+  const done = form('Purchase Order', { name: 'PO-2', docstatus: 1, per_received: 100 });
+  refresh(env, done);
+  assert.equal(done.buttons.length, 0);
 });
 
 test('users without a stock role see nothing', () => {

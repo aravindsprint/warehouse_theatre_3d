@@ -4,6 +4,15 @@
 
 Upgrading: run `bench migrate` (new Pick List and Sales Invoice fields, new settings) and `bench build`.
 
+### Receiving, quality hold and customer returns
+
+- **Warehouse Scan → Receive:** Purchase Orders still to receive, oldest due first (or scan the PO). Scan what arrived: each scan adds one, a box barcode adds the box, tap a line to type. Switch to **Damaged** to count damaged goods apart; they're received as ERPNext's rejected quantity into the Rejected warehouse. Add the supplier's delivery note number, and **Receive** posts a Purchase Receipt made with ERPNext's own *Make Purchase Receipt*, then offers **Put it away**. Receipts that ERPNext needs a Quality Inspection for, or batch/serial items, are saved as drafts with the reason.
+- **Quality hold:** items marked *Inspection Required before Purchase*, or every receipt when *Hold every receipt for checking* is on, are received into the **Quality hold warehouse**. Warehouse Scan → Quality hold lists what's waiting: **Release** finds a location and puts it away; **Reject** moves it to the Rejected warehouse.
+- **Warehouse Scan → Returns:** scan the Delivery Note, Sales Invoice or a carton label from the shipment, then scan what came back as **Good** or **Damaged**, with a reason. The return is made with ERPNext's own *Make Sales Return*: good goods to the Returns warehouse (or back where they came from), damaged ones to the Rejected warehouse. Delivery Note returns are submitted when you can; Sales Invoice returns (credit notes) stay drafts for accounts. Afterwards, **Put the good goods away**. Lines already returned are taken into account.
+- Home screen tiles are now grouped **Inbound**, **Outbound** and **Stock**, in the order work flows.
+- New settings: Quality hold, Rejected and Returns warehouses, and *Hold every receipt for checking*.
+- New buttons in ERPNext: **Receive with scanner** on Purchase Orders, **Return with scanner** on submitted Delivery Notes and stock Sales Invoices.
+
 ### Picker work queue and batch picking
 
 - **Work queue in Pick:** the floor's draft Pick Lists in the order to pick them: yours first, then unassigned ones by the earliest Sales Order delivery date, then oldest. Lists someone else has are greyed with their name.
