@@ -95,6 +95,7 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.packing import (  # noqa: E40
 	parse_carton,
 )
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access  # noqa: E402
+from warehouse_theatre_3d.warehouse_theatre_3d.api.picking import combine_walk, queue_order, split_pick  # noqa: E402
 from warehouse_theatre_3d.warehouse_theatre_3d.api.replenish import (  # noqa: E402
 	allocate_sources,
 	fefo_advice,
@@ -601,6 +602,39 @@ class TestReplenish(unittest.TestCase):
 		self.assertEqual(fefo_advice("BX", batches)["batch_no"], "B1")
 		self.assertIsNone(fefo_advice("B2", [{"batch_no": "BX", "qty": 1, "expiry": None}, {"batch_no": "B2", "qty": 1, "expiry": "2027-01-01"}]))
 		self.assertIsNone(fefo_advice("B9", []))
+
+
+class TestPicking(unittest.TestCase):
+	def test_queue_order(self):
+		lists = [
+			{"name": "old-free", "assigned": [], "due": None, "creation": "2026-10-01"},
+			{"name": "due-free", "assigned": [], "due": "2026-10-28", "creation": "2026-10-20"},
+			{"name": "theirs", "assigned": ["b@x"], "due": "2026-10-27", "creation": "2026-10-02"},
+			{"name": "mine", "assigned": ["a@x"], "due": None, "creation": "2026-10-25"},
+			{"name": "due-early", "assigned": [], "due": "2026-10-27", "creation": "2026-10-26"},
+		]
+		self.assertEqual([x["name"] for x in queue_order(lists, "a@x")], ["mine", "due-early", "due-free", "old-free", "theirs"])
+
+	def test_split_pick(self):
+		d = [("t1", 4), ("t2", 3), ("t3", 5)]
+		self.assertEqual(split_pick(12, d), {"t1": 4, "t2": 3, "t3": 5})
+		self.assertEqual(split_pick(6, d), {"t1": 4, "t2": 2, "t3": 0})
+		self.assertEqual(split_pick(0, d), {"t1": 0, "t2": 0, "t3": 0})
+		with self.assertRaises(ValueError):
+			split_pick(13, d)
+		with self.assertRaises(ValueError):
+			split_pick(-1, d)
+
+	def test_combine_walk(self):
+		rows = [
+			{"row_name": "a1", "floor": "F1", "grid": [2, 1, 0]},
+			{"row_name": "b1", "floor": "F1", "grid": [0, 3, 0]},
+			{"row_name": "a2", "floor": "F2", "grid": [0, 0, 0]},
+			{"row_name": "b2", "floor": "F1", "grid": [0, 1, 1]},
+			{"row_name": "x", "floor": None, "grid": None},
+		]
+		# F1 has most lines, so first; row 0 left to right, then row 2; F2 after; unmapped last.
+		self.assertEqual(combine_walk(rows), ["b2", "b1", "a1", "a2", "x"])
 
 
 if __name__ == "__main__":

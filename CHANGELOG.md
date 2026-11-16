@@ -4,6 +4,12 @@
 
 Upgrading: run `bench migrate` (new Pick List and Sales Invoice fields, new settings) and `bench build`.
 
+### Picker work queue and batch picking
+
+- **Work queue in Pick:** the floor's draft Pick Lists in the order to pick them: yours first, then unassigned ones by the earliest Sales Order delivery date, then oldest. Lists someone else has are greyed with their name.
+- **Next job:** takes the top list and assigns it to you with ERPNext's own Assign To, so supervisors see who has what in the form, the list view and Operations. Opening a list also assigns it to you unless someone else has it; a list can be given back to the queue.
+- **Warehouse Scan → Batch pick:** walk up to 8 Pick Lists in one route. Each list gets a numbered, coloured tote. At each shelf take the total for all orders; the app shows how many go into which tote (a short pick fills the first totes first). Wrong items and wrong batches are caught as in Pick. **Save & submit all** saves each list's picks and submits them.
+
 ### Replenishment and first-expiry-first-out picking
 
 - **Refill levels for pick shelves:** a new **Warehouse Pick Face** list (Stock Manager) sets, for one item on one shelf or floor area, *Refill at or below* and *Fill up to*, in stock units.
