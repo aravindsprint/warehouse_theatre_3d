@@ -106,6 +106,7 @@ const ICONS = {
   pack: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>',
   dispatch: '<path d="M2 6h11v10H2z"/><path d="M13 9h4l3 3v4h-7"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/>',
   print: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
+  replenish: '<path d="M4 20h16"/><path d="M6 20V9h5v11M13 20V4h5v16"/><path d="m8 6 2-2 2 2"/>',
 };
 const icon = (name, size) => `<svg viewBox="0 0 24 24" width="${size || 22}" height="${size || 22}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
@@ -763,11 +764,21 @@ const Pick = {
           return;
         }
         if (r.batch_no && row.batch_no && r.batch_no !== row.batch_no) { flash('err', `Wrong batch: line ${row.idx} needs ${row.batch_no}`); return; }
+        // First expiry, first out: a line with no batch set should take the batch expiring first.
+        const first = !row.batch_no && r.batch_no ? fefoFirst(row, r.batch_no) : null;
+        if (first && !(await confirmSheet('Pick the older batch?', `Batch ${first.batch_no} on this shelf expires ${first.expiry}, before ${r.batch_no}${first.mine ? ' (' + first.mine + ')' : ''}. Pick ${first.batch_no} first.`, 'Pick ' + r.batch_no + ' anyway', true))) return;
         return pickRow(row, r);
       }
       flash('err', 'Scan a location or an item');
     };
 
+    function fefoFirst(row, scanned) {
+      const live = (row.batches || []).filter(b => b.qty > 0);
+      const top = live[0], mine = live.find(b => b.batch_no === scanned);
+      if (!top || !top.expiry || top.batch_no === scanned) return null;
+      if (mine && mine.expiry && mine.expiry <= top.expiry) return null;
+      return { batch_no: top.batch_no, expiry: top.expiry, mine: mine && mine.expiry ? 'expires ' + mine.expiry : '' };
+    }
     function skipStop() { if (stop.value) stop.value.rows.forEach(r => { if (!K.picks[r.row_name]) K.skipped[r.row_name] = true; }); }
     function setOrder(o) { K.order = o; prefs.set('pickOrder', o); }
     async function save(submit) {
@@ -828,7 +839,9 @@ const Pick = {
             <Prompt v-if="!K.at" :text="'Scan the location ' + stop.path" hint="Confirms you're at the right shelf." tone="go"/>
             <Prompt v-else :text="'Scan each item'" :hint="K.at.warehouse===stop.warehouse ? 'Or tap a line to enter it without scanning.' : 'Picking from ' + K.at.path + ' instead.'" :tone="K.at.warehouse===stop.warehouse ? 'go' : 'warn'"/>
             <button v-for="r in stop.rows" :key="r.row_name" class="ws-line btn" :class="{done:isDone(r)}" @click="pickRow(r)">
-              <div><b>{{r.item_code}}</b><small>Line {{r.idx}} · {{r.item_name}}<span v-if="r.batch_no"> · batch {{r.batch_no}}</span></small></div>
+              <div><b>{{r.item_code}}</b><small>Line {{r.idx}} · {{r.item_name}}<span v-if="r.batch_no"> · batch {{r.batch_no}}<template v-if="r.batch_expiry"> (exp {{r.batch_expiry}})</template></span></small>
+                <small v-if="r.fefo" class="ws-fefo">Batch {{r.fefo.batch_no}} here expires sooner ({{r.fefo.expiry}})</small>
+                <small v-else-if="!r.batch_no && r.batches && r.batches.length && r.batches[0].expiry" class="ws-fefo ok">Take batch {{r.batches[0].batch_no}} first · exp {{r.batches[0].expiry}}</small></div>
               <div class="ws-num">
                 <template v-if="K.picks[r.row_name]">{{fmt(K.picks[r.row_name].picked_qty)}}<small>/{{fmt(r.qty)}} {{r.uom}}</small></template>
                 <template v-else>{{fmt(r.qty)}} <small>{{r.uom}}</small></template>

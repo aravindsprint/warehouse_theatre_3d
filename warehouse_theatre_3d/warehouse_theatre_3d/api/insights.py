@@ -7,6 +7,7 @@ from datetime import timedelta
 import frappe
 from frappe.utils import add_days, getdate, nowdate
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	_flt,
 	_int,
@@ -92,7 +93,8 @@ def get_bin_metrics(group_warehouse, days=90):
 	"""
 	_require_view_permission()
 	days = max(1, min(_int(days) or 90, 730))
-	bins = get_floor_bins(group_warehouse)
+	access.require_floor(group_warehouse)
+	bins = access.keep(get_floor_bins(group_warehouse), access.allowed_warehouses(), "wh")
 	whs = [b.wh for b in bins]
 	metrics = {wh: {} for wh in whs}
 	if not whs:
@@ -305,7 +307,8 @@ def resolve_scan(code):
 		return {"item_code": batch_item, "via": "batch", "batch_no": code}
 	serial = frappe.db.get_value("Serial No", code, ["item_code", "warehouse"], as_dict=True)
 	if serial:
-		return {"item_code": serial.item_code, "via": "serial_no", "warehouse": serial.warehouse}
+		return {"item_code": serial.item_code, "via": "serial_no",
+		        "warehouse": serial.warehouse if access.can_see(serial.warehouse) else None}
 	return None
 
 
@@ -347,7 +350,7 @@ def locate_item(item_code, company=None):
 		r["mapped"] = bool(r.wt_type in ("Bin", "Zone") and r.slot and r.floor)
 		r.pop("zone_floor", None)
 		r.pop("zone_floor_label", None)
-	return {"item": item, "locations": rows}
+	return {"item": item, "locations": access.keep(rows, access.allowed_warehouses(), "wh")}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -365,7 +368,8 @@ def get_timeline(group_warehouse, from_date=None, to_date=None):
 	if (to_date - from_date).days > MAX_TIMELINE_DAYS:
 		from_date = to_date - timedelta(days=MAX_TIMELINE_DAYS)
 
-	whs = [b.wh for b in get_floor_bins(group_warehouse)]
+	access.require_floor(group_warehouse)
+	whs = [b.wh for b in access.keep(get_floor_bins(group_warehouse), access.allowed_warehouses(), "wh")]
 	if not whs:
 		return {"dates": [], "start": {}, "changes": [], "from_date": str(from_date), "to_date": str(to_date)}
 	params = {"whs": tuple(whs), "from": from_date, "to": to_date}
@@ -412,9 +416,10 @@ def get_timeline(group_warehouse, from_date=None, to_date=None):
 # Capacity alerts (UI badge; the daily email lives in warehouse_theatre_3d.alerts)
 # ─────────────────────────────────────────────────────────────
 
-def compute_capacity_alerts(company=None, bin_threshold=95, floor_threshold=85):
+def compute_capacity_alerts(company=None, bin_threshold=95, floor_threshold=85, allowed=None):
 	"""Bins and Floors whose fill % is at or above the thresholds. Only bins with a UOM
-	capacity configured are considered, since fill % is meaningless without one."""
+	capacity configured are considered, since fill % is meaningless without one.
+	allowed: only these warehouses (a user's User Permissions); None for all."""
 	bins = frappe.db.sql(
 		"""
 		SELECT b.name AS wh, b.warehouse_name AS label, s.name AS slot, s.warehouse_name AS slot_label,
@@ -442,7 +447,7 @@ def compute_capacity_alerts(company=None, bin_threshold=95, floor_threshold=85):
 		{"company": company or None},
 		as_dict=True,
 	)
-	bins = list(bins) + list(zones)
+	bins = access.keep(list(bins) + list(zones), allowed, "wh")
 	whs = [b.wh for b in bins]
 	caps = get_uom_capacities(whs)
 	qtys = get_uom_quantities(whs)
@@ -481,6 +486,6 @@ def get_alert_thresholds():
 def get_capacity_alerts(company=None):
 	_require_view_permission()
 	bin_t, floor_t = get_alert_thresholds()
-	out = compute_capacity_alerts(company, bin_t, floor_t)
+	out = compute_capacity_alerts(company, bin_t, floor_t, access.allowed_warehouses())
 	out.update(bin_threshold=bin_t, floor_threshold=floor_t)
 	return out
