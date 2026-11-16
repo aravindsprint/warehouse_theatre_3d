@@ -85,6 +85,15 @@ from warehouse_theatre_3d.warehouse_theatre_3d.api.fulfillment import (  # noqa:
 	summarise_hours,
 	team_view,
 )
+from warehouse_theatre_3d.warehouse_theatre_3d.api.packing import (  # noqa: E402
+	carton_code,
+	check_carton,
+	invoice_lines_from_picks,
+	next_carton_no,
+	pack_progress,
+	packed_by_line,
+	parse_carton,
+)
 from warehouse_theatre_3d.warehouse_theatre_3d.api.health import (  # noqa: E402
 	bucket_index,
 	classify_movement,
@@ -446,6 +455,46 @@ class TestFulfillment(unittest.TestCase):
 		self.assertEqual(team["stuck"], ["PL-3"])
 		self.assertEqual(team["pickers"][0]["user"], "picker@x.com")
 		self.assertEqual(team["accuracy"]["percent"], 50)
+
+
+class TestPacking(unittest.TestCase):
+	def test_carton_codes(self):
+		self.assertEqual(carton_code("MAT-DN-2026-00012", 2), "MAT-DN-2026-00012/2")
+		self.assertEqual(parse_carton("MAT-DN-2026-00012/2"), ("MAT-DN-2026-00012", 2))
+		self.assertEqual(parse_carton(" ACC-SINV/2026/0001/10 "), ("ACC-SINV/2026/0001", 10))
+		self.assertIsNone(parse_carton("A3-L1"))
+		self.assertIsNone(parse_carton("DN-1/0"))
+		self.assertIsNone(parse_carton(""))
+
+	def test_cartons_and_progress(self):
+		cartons = [{"no": 1, "lines": [{"line": "a", "qty": 2}]}, {"no": 3, "lines": [{"line": "a", "qty": 1}, {"line": "b", "qty": 4}]}]
+		self.assertEqual(next_carton_no(cartons), 4)
+		self.assertEqual(next_carton_no([]), 1)
+		self.assertEqual(packed_by_line(cartons), {"a": 3, "b": 4})
+		self.assertEqual(pack_progress([{"qty": 3, "packed": 3}, {"qty": 5, "packed": 4}]),
+		                 {"lines": 2, "done": 1, "qty": 8, "packed": 7})
+
+	def test_check_carton(self):
+		rem = {"a": 2, "b": 5}
+		self.assertEqual(check_carton([{"line": "a", "qty": 1}, {"line": "a", "qty": 1}, {"line": "b", "qty": 0}], rem),
+		                 [{"line": "a", "qty": 2}])
+		for bad in ([{"line": "a", "qty": 3}], [{"line": "z", "qty": 1}], [{"line": "b", "qty": 0}], [{"line": "a", "qty": -1}], []):
+			with self.assertRaises(ValueError):
+				check_carton(bad, rem)
+
+	def test_invoice_lines_from_picks(self):
+		so_items = [{"so_detail": "soi-1", "item_code": "X", "conversion_factor": 12, "rate": 100},
+		            {"so_detail": "soi-2", "item_code": "Y", "conversion_factor": 1}]
+		picks = [
+			{"name": "p1", "sales_order_item": "soi-1", "picked_qty": 24, "warehouse": "A1", "batch_no": "B1"},
+			{"name": "p2", "sales_order_item": "soi-1", "picked_qty": 6, "warehouse": "A2"},
+			{"name": "p3", "sales_order_item": "soi-2", "picked_qty": 0, "warehouse": "A3"},
+			{"name": "p4", "sales_order_item": "soi-9", "picked_qty": 5, "warehouse": "A4"},
+		]
+		out = invoice_lines_from_picks(picks, so_items)
+		self.assertEqual([(x["warehouse"], x["qty"], x["stock_qty"]) for x in out], [("A1", 2, 24), ("A2", 0.5, 6)])
+		self.assertEqual((out[0]["batch_no"], out[0]["use_serial_batch_fields"], out[0]["rate"]), ("B1", 1, 100))
+		self.assertNotIn("use_serial_batch_fields", out[1])
 
 
 if __name__ == "__main__":

@@ -55,9 +55,11 @@ a{color:var(--accent)}
 .ws-tile .ws-ic{width:42px;height:42px;border-radius:12px;align-items:center;justify-content:center;margin-bottom:6px}
 .t-putaway .ws-ic{background:#dbeafe;color:#1d4ed8}.t-pick .ws-ic{background:#dcfce7;color:#15803d}
 .t-count .ws-ic{background:#fef3c7;color:#b45309}.t-lookup .ws-ic{background:#ede9fe;color:#6d28d9}
+.t-pack .ws-ic{background:#fce7f3;color:#be185d}.t-dispatch .ws-ic{background:#e0f2fe;color:#0369a1}
 @media (prefers-color-scheme: dark){
   .t-putaway .ws-ic{background:#172554;color:#93c5fd}.t-pick .ws-ic{background:#052e16;color:#86efac}
   .t-count .ws-ic{background:#2a1d06;color:#fcd34d}.t-lookup .ws-ic{background:#2e1065;color:#c4b5fd}
+  .t-pack .ws-ic{background:#3b0a24;color:#f9a8d4}.t-dispatch .ws-ic{background:#082f49;color:#7dd3fc}
 }
 .ws-tile-t{font-size:17px;font-weight:750}
 .ws-tile-s{font-size:13px;color:var(--text2)}
@@ -180,6 +182,13 @@ a{color:var(--accent)}
 
 /* Printed labels: hidden on screen */
 .ws-print{display:none}
+/* Pack and Dispatch */
+.ws-field{display:flex;flex-direction:column;gap:4px;margin:0 0 10px}
+.ws-field span{font-size:13px;font-weight:650;color:var(--text2)}
+.ws-field input{min-height:48px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:16px}
+.ws-field input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+.ws-addr{white-space:pre-line;font-size:13px;margin-top:4px}
+.ws-row2.wrap{flex-wrap:wrap}
 @media print{
   @page{size:A4;margin:0}
   html,body{background:#fff}
@@ -188,6 +197,19 @@ a{color:var(--accent)}
   .ws-print{display:grid;color:#000;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
   .ws-print.small{grid-template-columns:repeat(3,70mm);grid-auto-rows:37mm}
   .ws-print.large{grid-template-columns:repeat(2,105mm);grid-auto-rows:74.25mm}
+  .ws-print.carton{display:block}
+  .ws-clabel{width:100mm;height:150mm;padding:6mm;display:flex;flex-direction:column;gap:2mm;break-after:page;page-break-after:always;border:0.3mm solid #000;overflow:hidden}
+  .ws-clabel:last-child{break-after:auto;page-break-after:auto}
+  .ws-clabel-from{font-size:9pt;font-weight:700;border-bottom:0.3mm solid #000;padding-bottom:2mm}
+  .ws-clabel-to{font-size:8pt;text-transform:uppercase;letter-spacing:.5pt;margin-top:1mm}
+  .ws-clabel-cust{font-size:18pt;font-weight:800;line-height:1.1}
+  .ws-clabel-addr{font-size:10pt;white-space:pre-line;line-height:1.3;max-height:30mm;overflow:hidden}
+  .ws-clabel-row{display:flex;gap:4mm;align-items:center;margin-top:auto;border-top:0.3mm solid #000;padding-top:3mm}
+  .ws-clabel-qr{width:38mm;height:38mm;flex-shrink:0}.ws-clabel-qr svg{width:100%;height:100%;display:block}
+  .ws-clabel-no{font-size:34pt;font-weight:900;line-height:1}.ws-clabel-no small{font-size:14pt;font-weight:700}
+  .ws-clabel-meta{font-size:9pt;margin-top:1mm}
+  .ws-clabel-items{font-size:7pt;display:flex;flex-wrap:wrap;gap:1mm 3mm;color:#333}
+  .ws-clabel-code{font-size:8pt;font-family:monospace;text-align:center}
   .ws-label{display:flex;align-items:center;gap:3mm;padding:3mm 4mm;overflow:hidden;break-inside:avoid}
   .ws-label-qr{flex-shrink:0}
   .small .ws-label-qr{width:28mm;height:28mm}

@@ -2,7 +2,19 @@
 
 ## Unreleased
 
-Upgrading: run `bench migrate` (two new Pick List fields) and `bench build`.
+Upgrading: run `bench migrate` (new Pick List and Sales Invoice fields, new settings) and `bench build`.
+
+### Pack and Dispatch in Warehouse Scan
+
+Two new modes finish the order flow on the floor: pick → **pack** → **dispatch**.
+
+- **Pack:** a list of picked orders waiting to be packed, oldest first. Open one, or scan its Pick List, Delivery Note or Sales Invoice. If no dispatch document exists yet, the app creates the draft in the flow set in Warehouse Theatre Settings: a Delivery Note (ERPNext's own *Create Delivery Note*) or a Sales Invoice with Update Stock on, built from the Sales Orders with only what was picked, from the shelves it was picked from (ERPNext v16 uses its own Pick List → Sales Invoice). Scan items into a carton: each scan adds one, a box barcode adds the whole box, tap a line to type a quantity. Wrong items and wrong batches are caught. **Close carton** asks for an optional weight. In the Delivery Note flow each carton is a submitted Packing Slip, so ERPNext's packed quantities stay right; in the Sales Invoice flow cartons are kept on the invoice. A carton closed by mistake can be unpacked.
+- **Carton labels:** 4×6 inch (100×150 mm) shipping labels with the customer and shipping address, carton *n of N*, units, weight, LR number and a QR code (`<document>/<carton no>`).
+- **Dispatch:** a list of orders ready to go. Scan a carton label to open its order; scanning each carton onto the vehicle ticks it off, and a carton from another order is caught. Enter the transporter, LR / AWB and vehicle number (the last transporter and vehicle are remembered) and **Dispatch** submits the Delivery Note or Sales Invoice. Unpacked lines, unscanned cartons and a missing LR number are flagged before submitting. Sales Invoices without transport fields keep them in Remarks.
+- After submitting a Pick List in Pick, **Pack it now** goes straight to packing it.
+- New settings: **Dispatch with** (Delivery Note or Sales Invoice) and **Scan every carton before dispatch**.
+- New buttons in ERPNext: **Pack with scanner** on submitted delivery Pick Lists and draft Delivery Notes / stock Sales Invoices, and **Dispatch with scanner** on the latter.
+- Warehouse Scan modes can now live in their own files (`public/js/scan/*.js`) and register with the scanner before it starts.
 
 ### Operations view
 

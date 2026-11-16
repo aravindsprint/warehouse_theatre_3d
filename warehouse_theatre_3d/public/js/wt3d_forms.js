@@ -43,6 +43,14 @@
 		if (frm.doctype === 'Pick List' && frm.doc.docstatus < 2) {
 			frm.add_custom_button(__('Optimise pick route'), () => openMap({ route: frm.doc.name }), GROUP);
 		}
+		if (frm.doctype === 'Pick List' && frm.doc.docstatus === 1 && frm.doc.purpose === 'Delivery') {
+			frm.add_custom_button(__('Pack with scanner'), () => openScan({ pack: frm.doc.name }), GROUP);
+		}
+		const outward = frm.doctype === 'Delivery Note' || (frm.doctype === 'Sales Invoice' && frm.doc.update_stock);
+		if (outward && frm.doc.docstatus === 0 && !frm.doc.is_return && !frm.is_new()) {
+			frm.add_custom_button(__('Pack with scanner'), () => openScan({ pack: frm.doc.name, doctype: frm.doctype }), GROUP);
+			frm.add_custom_button(__('Dispatch with scanner'), () => openScan({ dispatch: frm.doc.name, doctype: frm.doctype }), GROUP);
+		}
 		if (frm.doctype === 'Pick List' && frm.doc.docstatus === 0) {
 			frm.add_custom_button(__('Pick with scanner'), () => openScan({ pick: frm.doc.name }), GROUP);
 		}
