@@ -110,6 +110,7 @@ const ICONS = {
   receive: '<path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M12 8v8m0 0-3-3m3 3 3-3"/>',
   returns: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
   quality: '<path d="M12 3 4 6v6c0 4.5 3.4 8.4 8 9 4.6-.6 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+  pallets: '<path d="M3 17h18M5 17v3M12 17v3M19 17v3"/><rect x="5" y="5" width="14" height="12" rx="1"/><path d="M5 11h14M12 5v12"/>',
   replenish: '<path d="M4 20h16"/><path d="M6 20V9h5v11M13 20V4h5v16"/><path d="m8 6 2-2 2 2"/>',
 };
 const icon = (name, size) => `<svg viewBox="0 0 24 24" width="${size || 22}" height="${size || 22}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -402,9 +403,9 @@ const Home = {
     };
     // Tiles in the order work flows through the warehouse, under three headings.
     const ORDER = { receive: 10, quality: 20, putaway: 30, pick: 50, batch: 60, pack: 70, dispatch: 80, returns: 90,
-      replenish: 110, count: 120, lookup: 130 };
+      replenish: 110, pallets: 115, count: 120, lookup: 130 };
     const GROUP = { receive: 'In', quality: 'In', putaway: 'In', pick: 'Out', batch: 'Out', pack: 'Out', dispatch: 'Out',
-      returns: 'In', replenish: 'Stock', count: 'Stock', lookup: 'Stock' };
+      returns: 'In', replenish: 'Stock', pallets: 'Stock', count: 'Stock', lookup: 'Stock' };
     const all = [
       { id: 'putaway', title: 'Put away', sub: 'Receipts to locations' },
       { id: 'pick', title: 'Pick', sub: 'Walk a Pick List' },

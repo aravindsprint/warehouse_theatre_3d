@@ -190,6 +190,14 @@ def resolve_code(code: str):
 			return {"kind": "document", "doctype": doctype, "name": code, "action": action,
 			        "docstatus": frappe.db.get_value(doctype, code, "docstatus")}
 
+	# A pallet label.
+	if code.upper().startswith("PAL-") and frappe.db.table_exists("Warehouse Pallet") and frappe.db.exists("Warehouse Pallet", code.upper()):
+		name = code.upper()
+		if not frappe.has_permission("Warehouse Pallet", "read", name):
+			frappe.throw(_("You can't open pallet {0}.").format(name), frappe.PermissionError)
+		return {"kind": "pallet", "name": name, "code": code,
+		        "warehouse": frappe.db.get_value("Warehouse Pallet", name, "warehouse")}
+
 	# A carton label from Pack: "<Delivery Note or Sales Invoice>/<carton no>".
 	carton = parse_carton(code)
 	if carton:
