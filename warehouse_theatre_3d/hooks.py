@@ -50,7 +50,11 @@ doc_events = {
 }
 
 scheduler_events = {
+    "hourly": [
+        "warehouse_theatre_3d.warehouse_theatre_3d.api.notify.hourly",
+    ],
     "daily": [
         "warehouse_theatre_3d.alerts.send_capacity_alerts",
+        "warehouse_theatre_3d.warehouse_theatre_3d.api.notify.daily",
     ],
 }

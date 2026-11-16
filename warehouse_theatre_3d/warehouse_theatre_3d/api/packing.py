@@ -22,6 +22,7 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, now_datetime, nowdate
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api.offline import replay_safe
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import _flt, _int, _require_view_permission, parse_json
 from warehouse_theatre_3d.warehouse_theatre_3d.api.fulfillment import load_orders
 from warehouse_theatre_3d.warehouse_theatre_3d.api.operations import _doc_url
@@ -274,6 +275,7 @@ def _make_sales_invoice_v15(pl):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def start_pack(pick_list: str | None = None, doctype: str | None = None, name: str | None = None,
                flow: str | None = None):
 	"""Open an order for packing: an existing draft Delivery Note / Sales Invoice, or the
@@ -306,6 +308,7 @@ def get_pack_state(doctype: str, name: str):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def save_carton(doctype: str, name: str, lines: str | list, weight: float | None = None):
 	"""Close one carton: a submitted Packing Slip (Delivery Note flow) or a carton entry on
 	the draft invoice (Sales Invoice flow)."""
@@ -348,6 +351,7 @@ def save_carton(doctype: str, name: str, lines: str | list, weight: float | None
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def remove_carton(doctype: str, name: str, no: int):
 	"""Undo a carton packed by mistake (cancels its Packing Slip in the Delivery Note flow)."""
 	_require_view_permission()
@@ -369,6 +373,7 @@ def remove_carton(doctype: str, name: str, no: int):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def dispatch(doctype: str, name: str, transporter_name: str | None = None, lr_no: str | None = None,
              vehicle_no: str | None = None, lr_date: str | None = None):
 	"""Record the transport details and submit the Delivery Note / Sales Invoice."""

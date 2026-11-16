@@ -84,7 +84,7 @@ def classify_movement(items, moves, days, today, slow_cover_days=SLOW_COVER_DAYS
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
-def get_stock_health(company=None, days=90, expiry_days=60, refresh=0):
+def get_stock_health(company: str | None = None, days: int | str = 90, expiry_days: int | str = 60, refresh: int | str = 0):
 	"""Everything the Stock Health page shows, for one company or all.
 
 	days: period for dead stock / slow movers. expiry_days: how far ahead to look for
@@ -96,7 +96,7 @@ def get_stock_health(company=None, days=90, expiry_days=60, refresh=0):
 	key = f"wt3d:stock_health:{frappe.session.user}:{company or ''}:{days}:{expiry_days}"
 	cache = frappe.cache()
 	if not _int(refresh):
-		hit = cache.get_value(key)
+		hit = cache.get_value(key, expires=True)
 		if hit:
 			return hit
 	result = _compute(company or None, days, expiry_days)

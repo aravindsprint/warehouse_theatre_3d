@@ -22,6 +22,7 @@ Every write uses the user's own ERPNext permissions.
 import frappe
 from frappe import _
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api.offline import replay_safe
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import _flt, _int, _require_view_permission, parse_json
 from warehouse_theatre_3d.warehouse_theatre_3d.api.operations import _build_transfer, _doc_url
@@ -150,6 +151,7 @@ def get_purchase_order(name: str):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def receive(purchase_order: str, counts: str | list, supplier_delivery_note: str | None = None, submit: int | str = 1):
 	"""Post a Purchase Receipt for what was counted against a Purchase Order."""
 	_require_view_permission()
@@ -239,6 +241,7 @@ def get_quality_hold():
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def reject_held(item_code: str, qty: float, reason: str | None = None):
 	"""Move stock that failed checking from the Quality hold to the Rejected warehouse."""
 	_require_view_permission()
@@ -309,6 +312,7 @@ def get_return_source(doctype: str, name: str):
 
 
 @frappe.whitelist(allow_guest=False, methods=["POST"])
+@replay_safe
 def make_return(doctype: str, name: str, counts: str | list, reason: str | None = None, submit: int | str = 0):
 	"""Make the return with ERPNext's make_sales_return, keeping only what was counted.
 	Good goods go back to the Returns warehouse (or where they came from); damaged ones

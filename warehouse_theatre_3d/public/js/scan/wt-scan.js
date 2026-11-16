@@ -23,7 +23,25 @@ function serverError(r) {
   return 'Something went wrong on the server';
 }
 
-function rpc(method, args, post) {
+// ── Outbox: writes made without a connection are kept on the phone and sent later ──
+// Each write carries a client id; the server runs an id at most once (api/offline.py),
+// so a retry after a lost reply never posts twice.
+const OUTBOX_KEY = 'wt-scan:outbox';
+const outbox = reactive({ items: [], failed: [], sending: false });
+function loadOutbox() { try { const o = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '{}'); outbox.items = o.items || []; outbox.failed = o.failed || []; } catch (e) {} }
+function saveOutbox() { try { localStorage.setItem(OUTBOX_KEY, JSON.stringify({ items: outbox.items, failed: outbox.failed })); } catch (e) {} }
+function newId() {
+  try { return crypto.randomUUID().replace(/-/g, ''); } catch (e) { return Date.now().toString(36) + Math.random().toString(36).slice(2, 12); }
+}
+const sameCall = (a, method, args) => a.method === method && JSON.stringify(a.args) === JSON.stringify(args || {});
+// Readable name for a queued write, shown in the outbox bar.
+function outboxLabel(method, args) {
+  const fn = method.split('.').pop().replace(/_/g, ' ');
+  const what = args && (args.name || args.purchase_order || args.pick_list || args.warehouse || args.target) || '';
+  return (fn.charAt(0).toUpperCase() + fn.slice(1)) + (what ? ' · ' + what : '');
+}
+
+function send(method, args, post, id) {
   const params = new URLSearchParams();
   Object.entries(args || {}).forEach(([k, v]) => {
     if (v !== null && v !== undefined && v !== '') params.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
@@ -31,6 +49,7 @@ function rpc(method, args, post) {
   const headers = { Accept: 'application/json' };
   let url = '/api/method/' + method, init;
   if (post) {
+    headers['X-WT-Client-Id'] = id;
     headers['X-Frappe-CSRF-Token'] = window.csrf_token || '';
     headers['Content-Type'] = 'application/x-www-form-urlencoded';
     init = { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers, body: params.toString() };
@@ -39,15 +58,68 @@ function rpc(method, args, post) {
     init = { method: 'GET', credentials: 'same-origin', cache: 'no-store', headers };
   }
   return fetch(url, init)
-    .catch(() => { throw new Error('No connection. Check Wi-Fi and try again.'); })
+    .catch(() => { const e = new Error('No connection. Check Wi-Fi and try again.'); e.offline = true; throw e; })
     .then(resp => resp.json().catch(() => ({})).then(r => ({ ok: resp.ok, status: resp.status, r })))
     .then(({ ok, status, r }) => {
       if (ok && !r.exc && !r.exception) return r.message;
       if (status === 403 && !r._server_messages) throw new Error('Your session has expired. Reload the page to sign in again.');
-      throw new Error(serverError(r));
+      const e = new Error(serverError(r)); e.status = status; throw e;
     });
 }
+
+function rpc(method, args, post) {
+  if (!post) return send(method, args, false);
+  if (outbox.items.some(x => sameCall(x, method, args))) {
+    return Promise.reject(new Error(__('Already saved on this phone and waiting to send.')));
+  }
+  const id = newId();
+  return send(method, args, true, id).catch(e => {
+    if (!e.offline) throw e;
+    // The request may or may not have reached the server: keep it, with the same id.
+    outbox.items.push({ id, method, args: args || {}, at: new Date().toISOString(), label: outboxLabel(method, args) });
+    saveOutbox();
+    const q = new Error(__('No connection. Saved on this phone; it will be sent when you\'re back online.'));
+    q.queued = true;
+    throw q;
+  });
+}
+
+async function flushOutbox() {
+  if (outbox.sending || !outbox.items.length) return;
+  outbox.sending = true;
+  try {
+    while (outbox.items.length) {
+      const x = outbox.items[0];
+      try {
+        await send(x.method, x.args, true, x.id);
+        outbox.items.shift(); saveOutbox();
+        flash('ok', 'Sent: ' + x.label);
+      } catch (e) {
+        if (e.offline) break;                                   // still no connection
+        if (/still being saved/i.test(e.message)) break;        // first attempt still running; try later
+        outbox.items.shift();
+        outbox.failed.push(Object.assign({}, x, { error: e.message }));
+        saveOutbox();
+        flash('err', 'Could not send ' + x.label + ': ' + e.message);
+      }
+    }
+  } finally { outbox.sending = false; }
+}
+loadOutbox();
+window.addEventListener('online', () => setTimeout(flushOutbox, 1000));
+setInterval(flushOutbox, 30000);
 const api = (mod, fn, args, post) => rpc(API + mod + '.' + fn, args, post);
+
+// ── Translation: messages for the user's language come with get_user_access ──
+const MESSAGES = reactive({});   // reactive, so text already on screen switches language when it loads
+function __(text, args) {
+  let t = (text && MESSAGES[text]) || text || '';
+  if (args) t = t.replace(/\{(\d+)\}/g, (m, i) => (args[i] !== undefined ? args[i] : m));
+  return t;
+}
+// Templates resolve names starting with "_" on window (Vue keeps them out of the
+// component scope), which is also where Frappe's desk keeps its __(); this page has no desk.
+window.__ = __;
 
 // ── Small helpers ─────────────────────────────────────────────
 const prefs = {
@@ -131,7 +203,7 @@ const floorLabel = computed(() => (S.floors.find(f => f.id === S.floor) || {}).n
 
 let flashTimer = null;
 function flash(kind, text) {
-  S.flash = { kind, text, at: Date.now() };
+  S.flash = { kind, text: __(text), at: Date.now() };
   feedback(kind);
   clearTimeout(flashTimer);
   flashTimer = setTimeout(() => { S.flash = null; }, kind === 'err' ? 4500 : 2600);
@@ -188,16 +260,16 @@ const TopBar = {
     <header class="ws-top">
       <button v-if="back" class="ws-icbtn" aria-label="Back" @click="$emit('back')"><Icon name="back"/></button>
       <div class="ws-top-t">
-        <h1>{{title}}</h1>
+        <h1>{{__(title)}}</h1>
         <div v-if="sub" class="ws-top-s">{{sub}}</div>
       </div>
-      <button class="ws-floor" @click="S.screen==='home' ? $root.pickFloor() : null" :disabled="S.screen!=='home'">{{floorLabel}}</button>
+      <button class="ws-floor" @click="S.screen==='home' ? $root.pickFloor() : null" :disabled="S.screen!=='home'">{{__(floorLabel)}}</button>
     </header>`,
 };
 
 const Prompt = {   // the big "what to scan next" line
   props: { text: String, hint: String, tone: String },
-  template: `<div class="ws-prompt" :class="tone"><div class="ws-prompt-t">{{text}}</div><div v-if="hint" class="ws-prompt-h">{{hint}}</div></div>`,
+  template: `<div class="ws-prompt" :class="tone"><div class="ws-prompt-t">{{__(text)}}</div><div v-if="hint" class="ws-prompt-h">{{__(hint)}}</div></div>`,
 };
 
 // Camera scanning: BarcodeDetector where the browser has it, otherwise ZXing.
@@ -310,10 +382,10 @@ const ScanBar = {
   },
   template: `
     <form class="ws-scanbar" @submit.prevent="submit" role="search">
-      <button type="button" class="ws-cambtn" aria-label="Scan with camera" @click="S.camera=true"><Icon name="camera" :size="24"/><span>Camera</span></button>
+      <button type="button" class="ws-cambtn" :aria-label="__('Scan with camera')" @click="S.camera=true"><Icon name="camera" :size="24"/><span>{{__('Camera')}}</span></button>
       <input ref="input" v-model="code" class="ws-scaninput" :inputmode="touch && !S.keyboard ? 'none' : 'text'"
         autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go"
-        :placeholder="S.busy ? 'Checking…' : (touch && !S.keyboard ? 'Ready to scan' : 'Scan or type a code')" aria-label="Scanned code"/>
+        :placeholder="S.busy ? __('Checking…') : (touch && !S.keyboard ? __('Ready to scan') : __('Scan or type a code'))" aria-label="Scanned code"/>
       <button v-if="touch" type="button" class="ws-icbtn" :class="{on:S.keyboard}" aria-label="Type a code" @click="toggleKeyboard"><Icon name="keyboard"/></button>
       <button v-if="code" type="submit" class="ws-go">Go</button>
     </form>`,
@@ -346,7 +418,7 @@ const Sheet = {   // number entry
           <button v-for="q in S.sheet.quick" :key="q.label" type="button" class="ws-chip" @click="S.sheet.value=String(q.value)">{{q.label}}</button>
         </div>
         <div class="ws-sheet-b">
-          <button type="button" class="ws-btn" @click="done(null)">Cancel</button>
+          <button type="button" class="ws-btn" @click="done(null)">{{__('Cancel')}}</button>
           <button type="submit" class="ws-btn primary">{{S.sheet.ok}}</button>
         </div>
       </form>
@@ -364,7 +436,7 @@ const Confirm = {
         <div class="ws-sheet-t">{{S.confirm.title}}</div>
         <div class="ws-sheet-s">{{S.confirm.text}}</div>
         <div class="ws-sheet-b">
-          <button class="ws-btn" @click="done(false)">Cancel</button>
+          <button class="ws-btn" @click="done(false)">{{__('Cancel')}}</button>
           <button class="ws-btn" :class="S.confirm.danger ? 'danger' : 'primary'" @click="done(true)">{{S.confirm.ok}}</button>
         </div>
       </div>
@@ -382,9 +454,9 @@ const Done = {   // result card after posting
       <h2>{{result.title}}</h2>
       <p v-for="(l, i) in result.lines" :key="i">{{l}}</p>
       <button v-if="result.next" class="ws-btn primary" @click="result.next.fn()">{{result.next.label}}</button>
-      <a v-if="result.url" class="ws-btn" :href="result.url" target="_blank" rel="noopener">Open in ERPNext ↗</a>
+      <a v-if="result.url" class="ws-btn" :href="result.url" target="_blank" rel="noopener">{{__('Open in ERPNext ↗')}}</a>
       <button class="ws-btn" :class="result.next ? '' : 'primary'" @click="again">{{result.again}}</button>
-      <button class="ws-btn ghost" @click="home">Home</button>
+      <button class="ws-btn ghost" @click="home">{{__('Home')}}</button>
     </div>`,
 };
 
@@ -436,18 +508,18 @@ const Home = {
         <Prompt text="Scan anything" hint="A location label, an item, a Pick List or a receipt. The app opens the right job."/>
         <div v-if="S.floorsLoaded && !S.floors.length" class="ws-note">No floors are set up yet. Map your warehouse in the 3D app first, then print location labels from here.</div>
         <template v-for="g in groups" :key="g.label">
-          <div v-if="groups.length > 1" class="ws-h">{{g.label}}</div>
+          <div v-if="groups.length > 1" class="ws-h">{{__(g.label)}}</div>
           <div class="ws-tiles">
             <button v-for="t in g.tiles" :key="t.id" class="ws-tile" :class="'t-'+t.id" @click="open(t.id)">
               <Icon :name="t.id" :size="28"/>
-              <span class="ws-tile-t">{{t.title}}</span>
-              <span class="ws-tile-s">{{t.sub}}</span>
+              <span class="ws-tile-t">{{__(t.title)}}</span>
+              <span class="ws-tile-s">{{__(t.sub)}}</span>
             </button>
           </div>
         </template>
-        <button class="ws-row-btn" @click="labels"><Icon name="labels"/><span><b>Print location labels</b><small>QR labels for every rack shelf and floor area</small></span></button>
-        <a class="ws-row-btn" href="/warehouse-theatre-3d"><Icon name="map"/><span><b>Open the 3D view</b><small>The full warehouse map</small></span></a>
-        <label class="ws-toggle"><input type="checkbox" v-model="S.sound"/> Beep on scan</label>
+        <button class="ws-row-btn" @click="labels"><Icon name="labels"/><span><b>{{__('Print location labels')}}</b><small>{{__('QR labels for every rack shelf and floor area')}}</small></span></button>
+        <a class="ws-row-btn" href="/warehouse-theatre-3d"><Icon name="map"/><span><b>{{__('Open the 3D view')}}</b><small>{{__('The full warehouse map')}}</small></span></a>
+        <label class="ws-toggle"><input type="checkbox" v-model="S.sound"/> {{__('Beep on scan')}}</label>
       </main>
     </div>`,
 };
@@ -847,8 +919,8 @@ const Pick = {
         <template v-else-if="!K.pl">
           <Prompt text="Scan a Pick List" hint="Or take the next job. Yours come first, then unassigned ones by delivery date."/>
           <div class="ws-actions" v-if="K.lists && K.lists.length">
-            <button class="ws-btn primary" :disabled="K.loading" @click="nextJob">Next job</button>
-            <button v-if="hasBatch" class="ws-btn" @click="batch">Batch pick</button>
+            <button class="ws-btn primary" :disabled="K.loading" @click="nextJob">{{__('Next job')}}</button>
+            <button v-if="hasBatch" class="ws-btn" @click="batch">{{__('Batch pick')}}</button>
           </div>
           <div v-if="K.loading" class="ws-muted">Loading…</div>
           <button v-for="l in K.lists || []" :key="l.name" class="ws-line btn" :class="{taken: l.assigned.length && !l.mine}" @click="open(l.name)">
@@ -1161,6 +1233,8 @@ const Root = {
     async function boot() {
       try {
         const access = await api('api', 'get_user_access', {});
+        Object.assign(MESSAGES, access.messages || {});
+        if (access.lang) document.documentElement.lang = access.lang;
         if (!access.can_view) { S.notice = 'Warehouse Scan is for Stock Users, Stock Managers and System Managers.'; return; }
         S.floors = await api('api', 'get_warehouse_groups', {});
         S.floorsLoaded = true;
@@ -1176,16 +1250,30 @@ const Root = {
       else if (Object.keys(EXT.links).some(k => q.get(k))) { const k = Object.keys(EXT.links).find(x => q.get(x)); EXT.links[k](q.get(k), q); }
       else if (q.get('count')) { try { const r = await resolve(q.get('count')); if (r.kind === 'location') { go('count'); Count.start(r); } } catch (e) { flash('err', e.message); } }
     }
-    onMounted(boot);
+    onMounted(() => { boot(); setTimeout(flushOutbox, 2000); });
     watch(() => S.sound, v => prefs.set('sound', v));
     watch(() => S.floor, v => { if (v) prefs.set('floor', v); });
     const view = computed(() => ({ home: Home, lookup: Lookup, putaway: Putaway, pick: Pick, count: Count, labels: Labels, ...EXT.screens }[S.screen] || Home));
-    return { S, C, view, floorSheet, onScan, pickFloor: () => { floorSheet.value.open = true; } };
+    const outboxOpen = ref(false);
+    function dismissFailed(i) { outbox.failed.splice(i, 1); saveOutbox(); }
+    return { S, C, view, floorSheet, onScan, pickFloor: () => { floorSheet.value.open = true; }, outbox, outboxOpen, flushOutbox, dismissFailed };
   },
   template: `
     <div class="ws-app" :class="{busy:S.busy}">
       <div v-if="S.notice" class="ws-main"><div class="ws-note">{{S.notice}}</div></div>
       <template v-else>
+        <div v-if="outbox.items.length || outbox.failed.length" class="ws-outbox" :class="{bad: outbox.failed.length}" role="status">
+          <button class="ws-outbox-bar" @click="outboxOpen = !outboxOpen">
+            <span v-if="outbox.items.length">{{outbox.items.length}} {{__('waiting to send')}}</span>
+            <span v-if="outbox.failed.length">{{outbox.items.length ? ' · ' : ''}}{{outbox.failed.length}} {{__('failed')}}</span>
+            <span class="ws-outbox-act">{{outboxOpen ? __('Hide') : __('Show')}}</span>
+          </button>
+          <div v-if="outboxOpen" class="ws-outbox-list">
+            <div v-for="x in outbox.items" :key="x.id" class="ws-outbox-row"><b>{{x.label}}</b><small>saved {{x.at.slice(11, 16)}}</small></div>
+            <div v-for="(x, i) in outbox.failed" :key="x.id" class="ws-outbox-row bad"><b>{{x.label}}</b><small>{{x.error}}</small><button class="ws-chip" @click="dismissFailed(i)">{{__('Dismiss')}}</button></div>
+            <button v-if="outbox.items.length" class="ws-btn" :disabled="outbox.sending" @click="flushOutbox">{{outbox.sending ? __('Sending…') : __('Send now')}}</button>
+          </div>
+        </div>
         <component :is="view" :key="S.screen"/>
         <div v-if="S.flash" class="ws-flash" :class="S.flash.kind" role="status" aria-live="polite">{{S.flash.text}}</div>
         <ScanBar/>
@@ -1198,7 +1286,7 @@ const Root = {
 window.WarehouseScan = {
   mount(el) { const app = createApp(Root); app.mount(el); return app; },
   /* For mode files in scan/: shared state, server calls, sheets and components. */
-  core: { S, EXT, ICONS, api, flash, feedback, ask, confirmSheet, go, handler, resolve, cache, prefs, fmt, daysAgo, loadScript, QR_URL,
+  core: { __, S, EXT, ICONS, api, flash, feedback, ask, confirmSheet, go, handler, resolve, cache, prefs, fmt, daysAgo, loadScript, QR_URL,
     components: { TopBar, Prompt, Icon, Done },
     // Hand stock to putaway: from a receipt, or as items sitting in a warehouse (from_warehouse).
     putaway: {
@@ -1211,6 +1299,6 @@ window.WarehouseScan = {
         finally { P.loading = false; }
       },
     } },
-  _test: { S, P, K, C, L, LB, onScan, cache },
+  _test: { S, P, K, C, L, LB, onScan, cache, outbox, flushOutbox, rpc },
 };
 })();

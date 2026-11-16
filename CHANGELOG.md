@@ -4,6 +4,14 @@
 
 Upgrading: run `bench migrate` (new Pick List and Sales Invoice fields, new settings) and `bench build`.
 
+### Offline scanning, alerts, translations
+
+- **Works through Wi-Fi drops:** a save made in Warehouse Scan without a connection is kept on the phone and sent automatically when the connection comes back (or with **Send now**). A bar shows what's waiting and anything the server refused. The same save can't be queued twice, and every write carries an id that the server runs only once, so a retry after a lost reply never posts twice.
+- **Operations alerts** (Warehouse Theatre Settings → Operations alerts): orders stuck in a stage longer than a set number of hours (Stock Managers), pick shelves needing an urgent refill (Stock Users and Managers), and batches about to expire (Stock Managers), in the notification bell, each reported once a day. Optional daily email digest to the Alert Recipients.
+- **Translations:** Warehouse Scan loads the user's language. Tamil and Hindi translations of the home screen, tiles, common prompts and buttons are included (`translations/ta.csv`, `hi.csv`); more can be added in ERPNext's Translation list. Server messages are now translatable too.
+- **Type hints** on every whitelisted method, as Frappe's code checks ask.
+- **Server tests on a real ERPNext site:** a GitHub Actions workflow builds a bench with ERPNext v15 and runs end-to-end tests of every flow (pick, pack, dispatch in both flows, returns, receiving and quality hold, replenishment, batch picking, slotting, pallets, User Permissions, offline replay), and posts the result on the pull request.
+
 ### Slotting advice and pallets
 
 - **Operations → Slotting** (Stock Manager): items on the open floor ranked A / B / C by how often they were picked (A = the first 80% of picks). Fast movers sitting in the costlier half of the floor (far from the dock or on high shelves) get a suggested move to the nearest empty location, or a swap with a slow mover there, with the walking saved over the period. **Create moves (draft)** makes one Material Transfer for the ones you tick (both directions for a swap). Distances use the same model as putaway, from the dock set in Putaway.

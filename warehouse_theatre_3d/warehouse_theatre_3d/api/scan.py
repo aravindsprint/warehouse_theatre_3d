@@ -11,6 +11,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 
+from warehouse_theatre_3d.warehouse_theatre_3d.api.offline import replay_safe
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import (
 	_flt,
@@ -367,6 +368,7 @@ def _add_fefo(rows):
 
 
 @frappe.whitelist(methods=["POST"])
+@replay_safe
 def save_picks(name: str, picks: str | list, submit: int | str = 0):
 	"""Record what was picked on a draft Pick List, and optionally submit it.
 
@@ -413,6 +415,7 @@ def save_picks(name: str, picks: str | list, submit: int | str = 0):
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist(methods=["POST"])
+@replay_safe
 def post_transfer(rows: str | list, submit: int | str = 0):
 	"""One Material Transfer for the moves scanned on the phone.
 
@@ -436,6 +439,7 @@ def post_transfer(rows: str | list, submit: int | str = 0):
 # ─────────────────────────────────────────────────────────────
 
 @frappe.whitelist(methods=["POST"])
+@replay_safe
 def finish_count(warehouse: str, rows: str | list):
 	"""Record a count of one location: a draft Stock Reconciliation for any differences,
 	and the date it was counted (also when nothing differed)."""

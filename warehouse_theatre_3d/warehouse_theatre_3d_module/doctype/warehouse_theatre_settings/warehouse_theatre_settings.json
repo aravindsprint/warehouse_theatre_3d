@@ -18,7 +18,14 @@
   "hold_all_receipts",
   "column_break_inbound",
   "rejected_warehouse",
-  "returns_warehouse"
+  "returns_warehouse",
+  "ops_alerts_section",
+  "enable_ops_alerts",
+  "stuck_hours",
+  "notify_urgent_refills",
+  "column_break_ops",
+  "notify_expiring_days",
+  "ops_alert_email"
  ],
  "fields": [
   {
@@ -109,6 +116,53 @@
    "label": "Returns warehouse",
    "options": "Warehouse",
    "description": "Where good customer returns go before putaway. Blank: back to the warehouse they were sent from."
+  },
+  {
+   "fieldname": "ops_alerts_section",
+   "fieldtype": "Section Break",
+   "label": "Operations alerts"
+  },
+  {
+   "fieldname": "enable_ops_alerts",
+   "fieldtype": "Check",
+   "label": "Send operations alerts",
+   "default": "0",
+   "description": "Notifications in the bell (and by email, per each user's notification settings)."
+  },
+  {
+   "fieldname": "stuck_hours",
+   "fieldtype": "Int",
+   "label": "Order stuck after (hours)",
+   "default": "24",
+   "depends_on": "enable_ops_alerts",
+   "description": "Stock Managers hear about orders that sit this long in picking, packing or dispatch."
+  },
+  {
+   "fieldname": "notify_urgent_refills",
+   "fieldtype": "Check",
+   "label": "Alert on urgent refills",
+   "default": "1",
+   "depends_on": "enable_ops_alerts",
+   "description": "Stock Users and Managers hear when draft picks need more than a pick shelf holds."
+  },
+  {
+   "fieldname": "column_break_ops",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "notify_expiring_days",
+   "fieldtype": "Int",
+   "label": "Alert on batches expiring within (days)",
+   "default": "7",
+   "depends_on": "enable_ops_alerts",
+   "description": "0 turns this off."
+  },
+  {
+   "fieldname": "ops_alert_email",
+   "fieldtype": "Check",
+   "label": "Daily email digest to Alert Recipients",
+   "default": "0",
+   "depends_on": "enable_ops_alerts"
   }
  ],
  "index_web_pages_for_search": 0,

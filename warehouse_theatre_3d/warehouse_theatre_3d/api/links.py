@@ -6,6 +6,7 @@ Delivery Note, Pick List or Material Request can be shown on the map. Read-only.
 """
 
 import frappe
+from frappe import _
 
 from warehouse_theatre_3d.warehouse_theatre_3d.api import access
 from warehouse_theatre_3d.warehouse_theatre_3d.api.common import _flt, _require_view_permission
@@ -103,7 +104,7 @@ def find_warehouse(warehouse: str):
 	"""Where one warehouse is on the map (for the Warehouse form's "Open in 3D" button)."""
 	_require_view_permission()
 	if not frappe.db.exists("Warehouse", warehouse):
-		frappe.throw(f"Warehouse {warehouse} not found")
+		frappe.throw(_("Warehouse {0} not found").format(warehouse))
 	access.require_floor(warehouse)
 	return resolve_locations([warehouse])[warehouse]
 
@@ -113,7 +114,7 @@ def get_document_locations(doctype: str, name: str):
 	"""A stock document's lines with where each item comes from and goes to on the map."""
 	_require_view_permission()
 	if doctype not in DOC_LINES:
-		frappe.throw(f"{doctype} can't be shown on the warehouse map.")
+		frappe.throw(_("{0} can't be shown on the warehouse map.").format(doctype))
 	doc = frappe.get_doc(doctype, name)
 	doc.check_permission("read")
 	child = DOC_LINES[doctype][0]

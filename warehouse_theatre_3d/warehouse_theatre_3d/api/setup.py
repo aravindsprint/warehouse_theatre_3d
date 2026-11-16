@@ -1,4 +1,5 @@
 import frappe
+from frappe import _
 import json
 
 # Roles allowed to VIEW the app (read-only access)
@@ -10,14 +11,14 @@ EDIT_ROLES = {"System Manager"}
 def _require_view_permission():
 	user_roles = set(frappe.get_roles())
 	if not (user_roles & VIEW_ROLES):
-		frappe.throw("You do not have permission to view Warehouse Theatre 3D.", frappe.PermissionError)
+		frappe.throw(_("You do not have permission to view Warehouse Theatre 3D."), frappe.PermissionError)
 
 
 def _require_edit_permission():
 	user_roles = set(frappe.get_roles())
 	if not (user_roles & EDIT_ROLES):
 		frappe.throw(
-			"You do not have permission to edit Warehouse Theatre 3D. Only System Manager can run setup or edit configuration.",
+			_("You do not have permission to edit Warehouse Theatre 3D. Only System Manager can run setup or edit configuration."),
 			frappe.PermissionError
 		)
 
@@ -30,7 +31,7 @@ def is_setup_complete():
 
 
 @frappe.whitelist()
-def scan_warehouse_tree(company=None):
+def scan_warehouse_tree(company: str | None = None):
 	"""
 	Walk the existing Warehouse parent_warehouse tree (no relabeling) and
 	return a summary grouped by depth, so the setup wizard can ask the
@@ -97,7 +98,7 @@ def scan_warehouse_tree(company=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def apply_depth_mapping(mapping, company=None):
+def apply_depth_mapping(mapping: str | list | dict, company: str | None = None):
 	"""
 	mapping: JSON list like [{"depth": 1, "role": "Building"}, {"depth": 2, "role": "Floor"}, ...]
 	role is one of: Building, Floor, Slot, Bin, Skip
@@ -117,7 +118,7 @@ def apply_depth_mapping(mapping, company=None):
 		if m.get("role") in valid_roles
 	}
 	if not depth_to_role:
-		frappe.throw("No valid role mapping provided.")
+		frappe.throw(_("No valid role mapping provided."))
 
 	filters = {}
 	if company:
